@@ -1,0 +1,34 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+env             = "dev"
+verified_domain = "REPLACE.onmicrosoft.com"
+
+# Decoy realism — production-looking, NO honeypot marker.
+decoy_au_name     = "IT Operations"
+lure_upn_prefix   = "identity-admin"
+lure_display_name = "Identity Administrator"
+lure_job_title    = "Senior Identity & Access Administrator"
+
+decoy_personas = [
+  { upn_prefix = "helpdesk-admin", display_name = "Helpdesk Administrator", job_title = "Service Desk Administrator" },
+  { upn_prefix = "backup-admin", display_name = "Backup Administrator", job_title = "Backup & Recovery Administrator" },
+]
+
+# Apparent privilege (AU-scoped, decoys only).
+custom_role_name = "Service Account Administrator"
+
+# Escalation bait.
+decoy_group_name = "Identity Administrators"
+decoy_app_names  = ["Privileged Identity Sync", "Directory Connector"]
+
+# PIM eligibility instead of active role (requires Entra ID P2). Default false.
+enable_pim = false
+
+# Optional explicit foothold->lure edge for demos (object ID of a test foothold principal).
+foothold_principal_object_id = ""
+
+# Conditional Access. Report-only by default; switch to "enabled" to enforce.
+enable_conditional_access = true
+ca_policy_state           = "enabledForReportingButNotEnforced"
+
+# Activity agent source allowlist. Leave empty until the optional activity agent is deployed.
+agent_named_location_cidrs = []

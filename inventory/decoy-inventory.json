@@ -1,0 +1,27 @@
+{
+  "$comment": "SINGLE SOURCE OF TRUTH for the honeypot. Consumed by detection (allowlist of decoy objects to watch) AND remediation (guardrail so playbooks only ever act on these objects). Populated by the deploy pipeline from Terraform/Bicep outputs. Object IDs are GUIDs filled post-deploy. NEVER commit real secrets here.",
+  "schemaVersion": 1,
+  "tenantId": "",
+  "identity": {
+    "decoyAdministrativeUnitId": "",
+    "lure": { "upn": "", "objectId": "", "displayName": "" },
+    "decoyPersonas": [],
+    "customRoleDefinitionId": "",
+    "decoyGroupIds": [],
+    "decoyAppIds": [],
+    "agentServicePrincipalId": ""
+  },
+  "network": {
+    "honeypotSubscriptionId": "",
+    "honeypotResourceGroupId": "",
+    "keyVaultId": "",
+    "decoyVmId": "",
+    "storageAccountId": ""
+  },
+  "allowlist": {
+    "$comment": "Identities/IPs that must NEVER trigger detection or remediation: break-glass GA, the activity agent, named-location CIDRs.",
+    "breakGlassObjectIds": [],
+    "agentObjectIds": [],
+    "agentNamedLocationCidrs": []
+  }
+}
