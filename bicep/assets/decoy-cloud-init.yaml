@@ -1,0 +1,24 @@
+#cloud-config
+# Plants fake-prod breadcrumbs on the decoy VM. NONE of these resolve to anything real;
+# each is a tripwire that advertises a path to "production" the attacker cannot actually take.
+write_files:
+  - path: /home/sysadmin/.ssh/config
+    permissions: '0600'
+    content: |
+      Host prod-jump
+        HostName jump.core-prod.internal
+        User svc-deploy
+        IdentityFile ~/.ssh/id_prod
+  - path: /opt/app/.env
+    permissions: '0640'
+    content: |
+      # Application configuration (production)
+      DB_CONNECTION="Server=sql-core-prod.database.windows.net;Database=core;User Id=app_rw;Password=Pr0d-DB-DoNotUse-Decoy;"
+      STORAGE_CONNECTION="DefaultEndpointsProtocol=https;AccountName=corebackups;AccountKey=ZmFrZS1kZWNveS1rZXktbm90LXJlYWw=;"
+      KEYVAULT_URI="https://kv-core-prod.vault.azure.net/"
+  - path: /opt/app/deploy/README.md
+    permissions: '0644'
+    content: |
+      # Deployment runbook
+      Use the identity-admin service account to rotate credentials in Key Vault.
+      Jump host: prod-jump (see ~/.ssh/config).
