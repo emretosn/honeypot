@@ -30,3 +30,7 @@ docs/
 
 # Deploy config (per-operator)
 deploy/config.env
+
+# Terraform plan output (binary, regenerated)
+tfplan
+*.tfplan
