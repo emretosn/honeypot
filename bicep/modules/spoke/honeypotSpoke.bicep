@@ -21,9 +21,12 @@ param workspaceId string
 @description('Tenant ID (for Key Vault).')
 param tenantId string
 
-@description('SSH public key for the decoy VM admin user.')
+@description('Include the decoy VM (an SSH lure) and the Application Gateway that fronts it. Off by default: the spoke then exposes only the decoy Key Vault + storage (the resource tripwires detection watches), needs no SSH key, and skips the slow App Gateway provision. Turn on for a more "published workload" look.')
+param includeDecoyVm bool = false
+
+@description('SSH public key for the decoy VM admin user. Required only when includeDecoyVm is true.')
 @secure()
-param decoyVmSshPublicKey string
+param decoyVmSshPublicKey string = ''
 
 @description('Base64 cloud-init planting fake-prod breadcrumbs on the decoy VM.')
 param decoyVmCustomDataBase64 string = ''
@@ -175,7 +178,7 @@ module peerToHub '../network/peering.bicep' = if (!empty(hubVnetId)) {
   }
 }
 
-module decoyVm '../spoke/decoyVm.bicep' = {
+module decoyVm '../spoke/decoyVm.bicep' = if (includeDecoyVm) {
   name: '${namePrefix}-decoy-vm'
   params: {
     name: '${namePrefix}-app01'
@@ -187,14 +190,15 @@ module decoyVm '../spoke/decoyVm.bicep' = {
   }
 }
 
-module appGw '../spoke/appGateway.bicep' = {
+// App Gateway exists only to front the decoy VM, so it is deployed only when the VM is.
+module appGw '../spoke/appGateway.bicep' = if (includeDecoyVm) {
   name: '${namePrefix}-appgw'
   params: {
     name: '${namePrefix}-appgw'
     location: location
     tags: tags
     subnetId: vnet.outputs.subnetIds['appgw-subnet']
-    backendIp: decoyVm.outputs.privateIp
+    backendIp: decoyVm!.outputs.privateIp
     workspaceId: workspaceId
   }
 }
@@ -222,7 +226,8 @@ module storage '../spoke/storage.bicep' = {
 
 output vnetId string = vnet.outputs.id
 output vnetName string = vnet.outputs.name
-output appGatewayPublicIp string = appGw.outputs.publicIp
-output decoyVmId string = decoyVm.outputs.id
+output includeDecoyVm bool = includeDecoyVm
+output appGatewayPublicIp string = includeDecoyVm ? appGw!.outputs.publicIp : ''
+output decoyVmId string = includeDecoyVm ? decoyVm!.outputs.id : ''
 output keyVaultId string = keyVault.outputs.id
 output storageAccountId string = storage.outputs.id

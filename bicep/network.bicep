@@ -40,9 +40,12 @@ param spokeNamePrefix string = 'core-prod'
 @description('Decoy spoke VNet address space.')
 param spokeAddressPrefix string = '10.20.0.0/16'
 
-@description('SSH public key for the decoy VM admin user.')
+@description('Include the decoy VM (SSH lure) + the App Gateway that fronts it. Off by default: the spoke exposes only the decoy Key Vault + storage, needs no SSH key, and skips the slow App Gateway provision.')
+param includeDecoyVm bool = false
+
+@description('SSH public key for the decoy VM admin user. Required only when includeDecoyVm is true.')
 @secure()
-param decoyVmSshPublicKey string
+param decoyVmSshPublicKey string = ''
 
 @description('Base64 cloud-init planting fake-prod breadcrumbs on the decoy VM.')
 param decoyVmCustomDataBase64 string = ''
@@ -126,6 +129,7 @@ module spoke 'modules/spoke/honeypotSpoke.bicep' = {
     hubVnetId: effectiveHubVnetId
     workspaceId: workspaceId
     tenantId: tenantId
+    includeDecoyVm: includeDecoyVm
     decoyVmSshPublicKey: decoyVmSshPublicKey
     decoyVmCustomDataBase64: decoyVmCustomDataBase64
     keyVaultName: keyVaultName
