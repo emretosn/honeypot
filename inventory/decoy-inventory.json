@@ -24,11 +24,11 @@
     "agentServicePrincipalId": ""
   },
   "network": {
-    "honeypotSubscriptionId": "",
-    "honeypotResourceGroupId": "",
-    "keyVaultId": "",
+    "honeypotSubscriptionId": "01169db8-9786-45a8-8878-de556ca253c4",
+    "honeypotResourceGroupId": "/subscriptions/01169db8-9786-45a8-8878-de556ca253c4/resourceGroups/rg-core-prod-weu",
+    "keyVaultId": "/subscriptions/01169db8-9786-45a8-8878-de556ca253c4/resourceGroups/rg-core-prod-weu/providers/Microsoft.KeyVault/vaults/kv-core-prod-136d",
     "decoyVmId": "",
-    "storageAccountId": ""
+    "storageAccountId": "/subscriptions/01169db8-9786-45a8-8878-de556ca253c4/resourceGroups/rg-core-prod-weu/providers/Microsoft.Storage/storageAccounts/stcoreprod32548272"
   },
   "allowlist": {
     "$comment": "Identities/IPs that must NEVER trigger detection or remediation: break-glass GA, the activity agent, named-location CIDRs.",

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Populate inventory/decoy-inventory.json from the identity module's Terraform outputs.
-# The inventory is the single source of truth shared by detection (what to watch) and
-# remediation (what it may act on). Run after `terraform apply` in terraform/identity.
+# Populate inventory/decoy-inventory.json — the single source of truth shared by detection
+# (what to watch) and remediation (what it may act on). Pulls IDENTITY ids from the Terraform
+# outputs and (if the network plane is deployed) NETWORK resource ids from the Bicep
+# 'network' subscription deployment. Run after `terraform apply` and after deploy/05_network.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,8 +26,32 @@ jq \
   | .allowlist.agentNamedLocationCidrs = (.allowlist.agentNamedLocationCidrs // [])
   ' "$INV" > "$tmp"
 mv "$tmp" "$INV"
+echo "Updated $INV identity section from Terraform outputs."
 
-echo "Updated $INV from Terraform outputs."
+# NETWORK section: pull from the Bicep 'network' deployment outputs if it exists (needs az login).
+if command -v az >/dev/null 2>&1 && az account show >/dev/null 2>&1; then
+  NET_JSON=$(az deployment sub show --name network --query properties.outputs -o json 2>/dev/null || echo "")
+  if [ -n "$NET_JSON" ] && [ "$NET_JSON" != "null" ]; then
+    SUB=$(az account show --query id -o tsv)
+    tmp=$(mktemp)
+    jq \
+      --argjson net "$NET_JSON" \
+      --arg sub "$SUB" '
+      .network.honeypotSubscriptionId = $sub
+      | .network.honeypotResourceGroupId = ("/subscriptions/" + $sub + "/resourceGroups/" + ($net.honeypotResourceGroupName.value // ""))
+      | .network.keyVaultId = ($net.keyVaultId.value // "")
+      | .network.storageAccountId = ($net.storageAccountId.value // "")
+      | .network.decoyVmId = ($net.decoyVmId.value // "")
+      ' "$INV" > "$tmp"
+    mv "$tmp" "$INV"
+    echo "Updated $INV network section from the 'network' deployment outputs."
+  else
+    echo "NOTE: no 'network' deployment found — network ids left empty (run deploy/05_network.sh first)."
+  fi
+else
+  echo "NOTE: az not logged in — skipped network section (run after deploy/05_network.sh)."
+fi
+
 if [ "$(jq '.allowlist.breakGlassObjectIds | length' "$INV")" -eq 0 ]; then
-  echo "WARNING: allowlist.breakGlassObjectIds is empty — set break_glass_object_ids in terraform.tfvars (the customer's real break-glass GA) before enabling enforcement."
+  echo "WARNING: allowlist.breakGlassObjectIds is empty — set break_glass_object_ids in terraform.tfvars (the real break-glass GA) before enabling enforcement."
 fi

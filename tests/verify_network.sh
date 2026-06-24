@@ -36,9 +36,14 @@ echo "$PEERINGS" | grep -iqE 'spoke|prod-spoke|workload-spoke' \
   || pass "no spoke-to-spoke peering (hub-only transit)"
 
 # Decoy resources exist.
-az keyvault list -g "$SPOKE_RG" --query '[0].name' -o tsv >/dev/null 2>&1 && pass "decoy Key Vault exists" || fail "decoy Key Vault missing"
-az storage account list -g "$SPOKE_RG" --query '[0].name' -o tsv >/dev/null 2>&1 && pass "decoy storage account exists" || fail "decoy storage missing"
-az vm list -g "$SPOKE_RG" --query '[0].name' -o tsv >/dev/null 2>&1 && pass "decoy VM exists" || fail "decoy VM missing"
+az keyvault list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q . && pass "decoy Key Vault exists" || fail "decoy Key Vault missing"
+az storage account list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q . && pass "decoy storage account exists" || fail "decoy storage missing"
+# Decoy VM is OPTIONAL (includeDecoyVm). Report presence, do not require it.
+if az vm list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q .; then
+  pass "decoy VM present (SSH lure enabled)"
+else
+  echo "  [skip] decoy VM not deployed (includeDecoyVm=false) — KV/storage are the resource tripwires"
+fi
 
 # OPSEC: no honeypot marker in attacker-visible resource names.
 NAMES=$(az resource list -g "$SPOKE_RG" --query '[].name' -o tsv 2>/dev/null)
