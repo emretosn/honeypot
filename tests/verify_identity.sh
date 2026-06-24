@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Identity honeypot verification — run AFTER `terraform apply` in terraform/identity.
 # Asserts the deception EXISTS and, more importantly, that it is CONTAINED:
-#   - the lure holds the AU-scoped custom role (privilege exists)
+#   - the lure holds the AU-scoped built-in role (privilege exists)
 #   - the lure has NO Azure RBAC over any subscription (powerless over prod)
-#   - the custom role assignment is scoped to the decoy AU, not tenant-wide
+#   - the role assignment is scoped to the decoy AU, not tenant-wide
 #   - decoy apps have NO app-role/Graph grants
 #   - no honeypot marker leaks into any attacker-visible name
 # Requires: az login; jq. Reads identifiers from inventory/decoy-inventory.json.
-set -euo pipefail
+set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INV="$ROOT/inventory/decoy-inventory.json"
@@ -20,7 +20,7 @@ fail() { echo "FAIL: $1"; exit 1; }
 LURE_ID=$(jq -r '.identity.lure.objectId' "$INV")
 LURE_UPN=$(jq -r '.identity.lure.upn' "$INV")
 AU_ID=$(jq -r '.identity.decoyAdministrativeUnitId' "$INV")
-ROLE_ID=$(jq -r '.identity.customRoleDefinitionId' "$INV")
+ROLE_ID=$(jq -r '.identity.lureRoleDefinitionId' "$INV")
 GROUP_ID=$(jq -r '.identity.decoyGroupIds[0]' "$INV")
 [ -n "$LURE_ID" ] && [ "$LURE_ID" != "null" ] || fail "lure object ID missing from inventory"
 
@@ -31,16 +31,16 @@ az ad user show --id "$LURE_ID" >/dev/null 2>&1 && pass "lure user exists" || fa
 
 # 2. Lure is a member of the decoy AU (containment boundary).
 IN_AU=$(az rest --method get \
-  --url "https://graph.microsoft.com/v1.0/directory/administrativeUnits/$AU_ID/members/$LURE_ID" \
-  2>/dev/null && echo yes || echo no)
-[ "$IN_AU" = "yes" ] && pass "lure is a member of the decoy AU" || fail "lure not in decoy AU"
+  --url "https://graph.microsoft.com/v1.0/directory/administrativeUnits/$AU_ID/members?\$select=id" \
+  2>/dev/null | jq -r --arg id "$LURE_ID" '[.value[]?.id] | index($id) // empty')
+[ -n "$IN_AU" ] && pass "lure is a member of the decoy AU" || fail "lure not in decoy AU"
 
-# 3. Lure holds the custom role, AU-SCOPED (not tenant-wide). This is the core containment check.
+# 3. Lure holds the role, AU-SCOPED (not tenant-wide). This is the core containment check.
 ASSIGN=$(az rest --method get \
   --url "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?\$filter=principalId eq '$LURE_ID'" \
   2>/dev/null | jq -c '.value[]? | {roleDefinitionId, directoryScopeId}')
 echo "$ASSIGN" | grep -q "/administrativeUnits/$AU_ID" \
-  && pass "custom role assignment is AU-scoped to the decoy AU" \
+  && pass "role assignment is AU-scoped to the decoy AU" \
   || echo "NOTE: no ACTIVE AU-scoped assignment found (expected if enable_pim=true — check eligible assignments)"
 echo "$ASSIGN" | grep -q '"directoryScopeId":"/"' \
   && fail "lure has a TENANT-WIDE role assignment — containment broken!" \

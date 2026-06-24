@@ -24,9 +24,9 @@ output "decoy_persona_object_ids" {
   description = "Object IDs of the supporting decoy personas."
 }
 
-output "custom_role_definition_id" {
-  value       = azuread_custom_directory_role.lure.object_id
-  description = "Object ID of the lure's AU-scoped custom directory role."
+output "lure_role_definition_id" {
+  value       = var.lure_role_definition_id
+  description = "Definition (template) ID of the built-in role assigned to the lure at AU scope."
 }
 
 output "decoy_group_id" {
@@ -42,6 +42,16 @@ output "decoy_app_ids" {
 output "agent_named_location_id" {
   value       = length(azuread_named_location.agent) > 0 ? azuread_named_location.agent[0].object_id : ""
   description = "Object ID of the agent named location (empty if no agent configured)."
+}
+
+output "break_glass_object_ids" {
+  value       = var.break_glass_object_ids
+  description = "Production break-glass/GA object IDs (input). Synced to inventory allowlist.breakGlassObjectIds so detection excludes and response never disables them."
+}
+
+output "deploy_production" {
+  value       = var.deploy_production
+  description = "Whether the identity plane was deployed in production-simulation mode (seeds simulated production identities)."
 }
 
 output "lure_password" {

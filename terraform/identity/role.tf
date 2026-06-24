@@ -1,23 +1,14 @@
-# The lure's apparent privilege. A custom directory role whose actions are AU-scopable
-# user-management only — powerful over decoy users, powerless over production. This is the
-# "prize" an attacker wants to steal; every target it can act on is a decoy.
-resource "azuread_custom_directory_role" "lure" {
-  display_name = var.custom_role_name
-  description  = "Manage service and operational accounts."
-  enabled      = true
-  version      = "1"
-
-  permissions {
-    allowed_resource_actions = var.custom_role_actions
-  }
-}
+# The lure's apparent privilege: a BUILT-IN Entra role (User Administrator by default)
+# assigned at AU scope. Entra enforces the scope, so this power applies ONLY to the
+# non-admin decoy personas in the decoy AU — powerful over decoys, powerless over production,
+# and it cannot reset admin passwords. This is the "prize" an attacker wants to steal.
 
 # Active AU-scoped assignment (default). The lure HOLDS the role, scoped to decoys only.
 # Used when PIM is not enabled.
 resource "azuread_directory_role_assignment" "lure_active" {
   count = var.enable_pim ? 0 : 1
 
-  role_id             = azuread_custom_directory_role.lure.object_id
+  role_id             = var.lure_role_definition_id
   principal_object_id = azuread_user.lure.object_id
   directory_scope_id  = local.au_scope
 }
@@ -28,7 +19,7 @@ resource "azuread_directory_role_assignment" "lure_active" {
 resource "azuread_directory_role_eligibility_schedule_request" "lure_eligible" {
   count = var.enable_pim ? 1 : 0
 
-  role_definition_id = azuread_custom_directory_role.lure.object_id
+  role_definition_id = var.lure_role_definition_id
   principal_id       = azuread_user.lure.object_id
   directory_scope_id = local.au_scope
   justification      = "Operational account management eligibility."

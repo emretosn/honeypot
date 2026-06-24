@@ -27,3 +27,6 @@ azureauth.json
 # Planning
 plan/
 docs/
+
+# Deploy config (per-operator)
+deploy/config.env

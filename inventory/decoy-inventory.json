@@ -1,14 +1,26 @@
 {
   "$comment": "SINGLE SOURCE OF TRUTH for the honeypot. Consumed by detection (allowlist of decoy objects to watch) AND remediation (guardrail so playbooks only ever act on these objects). Populated by the deploy pipeline from Terraform/Bicep outputs. Object IDs are GUIDs filled post-deploy. NEVER commit real secrets here.",
   "schemaVersion": 1,
-  "tenantId": "",
+  "tenantId": "ff3bd58a-2a1a-47ec-89d7-37e05ee71ede",
   "identity": {
-    "decoyAdministrativeUnitId": "",
-    "lure": { "upn": "", "objectId": "", "displayName": "" },
-    "decoyPersonas": [],
-    "customRoleDefinitionId": "",
-    "decoyGroupIds": [],
-    "decoyAppIds": [],
+    "decoyAdministrativeUnitId": "f6ac85d0-2428-46fd-a66c-e90e1f5bd3de",
+    "lure": {
+      "upn": "identity-admin@MngEnvMCAP372960.onmicrosoft.com",
+      "objectId": "20b2ba2f-7311-4b0a-b3d4-6d7a962183d4",
+      "displayName": "Identity Administrator"
+    },
+    "decoyPersonas": [
+      "af64cc81-f585-4121-9503-b78cac69ebfa",
+      "26b76179-95da-420a-950a-878267979adc"
+    ],
+    "lureRoleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+    "decoyGroupIds": [
+      "900350f1-de5d-49e8-aae8-9f68c40b7a07"
+    ],
+    "decoyAppIds": [
+      "abaf363d-a0ce-4b94-9cd0-9262b8ed40b9",
+      "ecb7553e-f7b0-480b-b155-12d5f68b50bf"
+    ],
     "agentServicePrincipalId": ""
   },
   "network": {

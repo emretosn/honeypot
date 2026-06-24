@@ -20,14 +20,12 @@ az rest --method get --url "$BASE/onboardingStates/default?api-version=2024-09-0
   && pass "Microsoft Sentinel is onboarded" \
   || fail "Sentinel onboarding state 'default' not found"
 
-# 2. Expected honeypot rules exist and are enabled.
+# 2. Identity rules must always be present and enabled (the load-bearing detections).
 RULES_JSON=$(az rest --method get --url "$BASE/alertRules?api-version=2024-09-01" 2>/dev/null)
 EXPECTED=(
   "password reset on lure identity"
   "role assignment or PIM activation on lure identity"
   "sign-in as lure identity from non-allowlisted source"
-  "decoy Key Vault secret accessed"
-  "decoy storage accessed"
 )
 for name in "${EXPECTED[@]}"; do
   MATCH=$(echo "$RULES_JSON" | jq -r --arg n "$name" '.value[] | select(.properties.displayName | test($n; "i")) | {enabled: .properties.enabled, sev: .properties.severity}' 2>/dev/null)
@@ -36,6 +34,16 @@ for name in "${EXPECTED[@]}"; do
     [ "$EN" = "true" ] && pass "rule present and enabled: $name" || fail "rule present but DISABLED: $name"
   else
     fail "expected rule missing: $name"
+  fi
+done
+
+# Resource rules are optional (only present when enableResourceRules=true, after the network
+# module is deployed). Report their status without failing.
+for name in "decoy Key Vault secret accessed" "decoy storage accessed"; do
+  if echo "$RULES_JSON" | jq -e --arg n "$name" '.value[] | select(.properties.displayName | test($n; "i"))' >/dev/null 2>&1; then
+    pass "resource rule present: $name"
+  else
+    echo "NOTE: resource rule not deployed: $name (expected until the network module + enableResourceRules)"
   fi
 done
 

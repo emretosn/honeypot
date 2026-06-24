@@ -50,20 +50,21 @@ variable "decoy_personas" {
 
 # --- The lure's apparent privilege: an AU-scoped custom role over decoy users only. ---
 
-variable "custom_role_name" {
-  type        = string
-  default     = "Service Account Administrator"
-  description = "Privileged-sounding custom directory role name. Powerful over decoys, powerless over prod."
+# The lure's apparent privilege is a BUILT-IN Entra role assigned at AU scope. Custom roles
+# cannot hold reset-password / enable-disable actions, so a built-in AU-scopable role is the
+# only way to give the lure genuinely enticing (and Entra-enforced-contained) admin power.
+variable "lure_role_definition_id" {
+  type = string
+  # User Administrator (well-known template ID). AU-scopable; manages users/groups and resets
+  # passwords for non-admins in the AU only.
+  default     = "fe930be7-5e62-47db-91af-98c3a49a38b1"
+  description = "Built-in directory role definition (template) ID assigned to the lure at AU scope. Default = User Administrator."
 }
 
-variable "custom_role_actions" {
-  type = list(string)
-  default = [
-    "microsoft.directory/users/standard/read",
-    "microsoft.directory/users/basic/update",
-    "microsoft.directory/users/password/update",
-  ]
-  description = "Allowed resource actions. MUST be AU-scopable user-management actions only (containment)."
+variable "lure_role_name" {
+  type        = string
+  default     = "User Administrator"
+  description = "Display name of the built-in role above (for documentation / outputs only)."
 }
 
 # --- Escalation bait ---
@@ -115,4 +116,18 @@ variable "agent_named_location_cidrs" {
   type        = list(string)
   default     = []
   description = "CIDRs of the (optional) activity agent. Empty = no agent yet."
+}
+
+# --- Production/honeypot boundary & response contract inputs ---
+
+variable "deploy_production" {
+  type        = bool
+  default     = false
+  description = "false (HONEYPOT-ONLY mode): decoy identities deploy alongside an existing production environment; the foothold and break-glass are supplied as INPUTS. true (PRODUCTION-SIM mode): this project also seeds a simulated *production* environment (e.g. a throwaway foothold + break-glass placeholder) so the honeypot can be demonstrated. A real deployment uses false."
+}
+
+variable "break_glass_object_ids" {
+  type        = list(string)
+  default     = []
+  description = "Object IDs of the (production) real break-glass / Global Admin accounts. Supplied as an INPUT; flows to inventory allowlist.breakGlassObjectIds so detection excludes them and response never disables them. Empty only in early testing."
 }

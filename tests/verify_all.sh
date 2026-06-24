@@ -32,6 +32,7 @@ run "bicep: network"    az bicep build-params --file bicep/parameters/network.de
 run "bicep: detection"  az bicep build-params --file bicep/parameters/detection.dev.bicepparam --stdout
 run "bicep: response"   az bicep build-params --file bicep/parameters/response.dev.bicepparam --stdout
 run "terraform: identity validate" bash -c 'cd terraform/identity && terraform init -backend=false -input=false >/dev/null && terraform validate'
+run "inventory: contract"  ./tests/verify_inventory.sh
 run "shell: verify scripts parse" bash -c 'for s in tests/verify_*.sh tests/sync_inventory.sh; do bash -n "$s" || exit 1; done'
 
 if [ "$MODE" = "tenant" ]; then

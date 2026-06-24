@@ -1,8 +1,11 @@
-# Remote state with locking. Provide the values at init time, e.g.:
-#   terraform init -backend-config=backend.hcl   (see docs/foundation.md, step 3)
-# Keep this block empty so the same config works for both interactive (use_azuread_auth)
-# and CI/OIDC (use_oidc) auth. The backend storage account lives in the internal
-# management plane, keeping decoy/identity state out of any attacker-reachable location.
-terraform {
-  backend "azurerm" {}
-}
+# State is LOCAL during dev/test: Terraform keeps state in terraform.tfstate on the
+# operator's machine. That file is gitignored and contains sensitive values (incl. the
+# lure password), so protect the machine accordingly.
+#
+# A remote azurerm backend (private-network storage account) is introduced in the CI/CD
+# stage, where shared state and locking actually matter. The hardened backend account is
+# defined in bootstrap/ for that stage. To migrate later:
+#   1. add a `terraform { backend "azurerm" {} }` block here,
+#   2. run `terraform init -migrate-state -backend-config=backend.hcl`.
+#
+# No backend block here = local backend.

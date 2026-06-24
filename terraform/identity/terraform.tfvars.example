@@ -2,6 +2,17 @@
 env             = "dev"
 verified_domain = "REPLACE.onmicrosoft.com"
 
+# --- Production/honeypot boundary ---
+# false (HONEYPOT-ONLY mode): deploy alongside a real production environment; supply
+#   break_glass_object_ids (and, later, the real foothold) as INPUTS. true (PRODUCTION-SIM
+#   mode): this project also seeds a simulated production environment for the demo.
+deploy_production = false
+
+# Production break-glass / Global Admin object IDs (INPUT). Synced to the inventory allowlist so
+# detection excludes them and response never disables them. REQUIRED before enabling
+# enforcement (dryRun=false). In early testing this may stay empty.
+break_glass_object_ids = []
+
 # Decoy realism — production-looking, NO honeypot marker.
 decoy_au_name     = "IT Operations"
 lure_upn_prefix   = "identity-admin"
@@ -13,8 +24,9 @@ decoy_personas = [
   { upn_prefix = "backup-admin", display_name = "Backup Administrator", job_title = "Backup & Recovery Administrator" },
 ]
 
-# Apparent privilege (AU-scoped, decoys only).
-custom_role_name = "Service Account Administrator"
+# Apparent privilege: built-in role assigned AU-scoped (decoys only). Default = User
+# Administrator. Override lure_role_definition_id to use a different AU-scopable built-in role.
+# lure_role_definition_id = "fe930be7-5e62-47db-91af-98c3a49a38b1"  # User Administrator
 
 # Escalation bait.
 decoy_group_name = "Identity Administrators"

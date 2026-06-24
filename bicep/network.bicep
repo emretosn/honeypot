@@ -1,4 +1,4 @@
-metadata description = 'Subscription-scope entrypoint for the hub-spoke network. Creates the hub VNet (internal plane) and the honeypot spoke (decoy plane, production-looking). The honeypot spoke is also deployable standalone against a pre-existing hub by passing existingHubVnetId. A minimal production spoke is optional and only for lab realism.'
+metadata description = 'Subscription-scope entrypoint for the hub-spoke network. Creates the hub VNet (internal plane) and the honeypot spoke (decoy plane, production-looking). The honeypot spoke is also deployable standalone against a pre-existing hub by passing existingHubVnetId. A minimal production spoke is optional and only for production-simulation realism.'
 
 targetScope = 'subscription'
 
@@ -28,7 +28,10 @@ param hubAddressPrefix string = '10.0.0.0/16'
 @description('Production address space the honeypot must not reach (egress deny).')
 param productionAddressPrefixes array = ['10.10.0.0/16']
 
-@description('If set, deploy the honeypot spoke against this pre-existing hub VNet and skip hub creation.')
+@description('Production-simulation switch. false (default, HONEYPOT-ONLY mode): the platform creates NO hub and deploys the honeypot spoke alongside an EXISTING production hub supplied via existingHubVnetId — this is how the honeypot drops into a real hub-spoke. true (PRODUCTION-SIM mode): this project also stands up a lightweight simulated *production* environment (thin hub) so the honeypot can be demonstrated alongside it. A real deployment MUST use deployProduction=false and supply existingHubVnetId + workspaceId as inputs.')
+param deployProduction bool = false
+
+@description('Resource ID of a pre-existing (production) hub VNet to peer the honeypot spoke to (monitoring only). REQUIRED when deployProduction=false; ignored when deployProduction builds its own simulated hub.')
 param existingHubVnetId string = ''
 
 @description('Decoy spoke name prefix. Production-looking, NO honeypot marker. e.g. "core-prod".')
@@ -64,7 +67,17 @@ param decoyTags object = {
   managedBy: 'iac'
 }
 
-var createHub = empty(existingHubVnetId)
+// PRODUCTION/HONEYPOT boundary: the hub belongs to the *production* environment, not the
+// honeypot platform. The platform never creates it — only the production-simulation stage
+// (deployProduction=true) does, and only if an existing production hub was not supplied. In
+// honeypot-only mode the production hub MUST arrive as an input.
+var createHub = deployProduction && empty(existingHubVnetId)
+
+// Honeypot-only contract: a real deployment must supply the production hub it deploys
+// alongside. Surfaced as an output so misconfiguration (deployProduction=false with no hub) is
+// visible in deployment outputs and asserted by tests/verify_network.sh, without depending on
+// experimental Bicep features.
+var hubContractSatisfied = deployProduction || !empty(existingHubVnetId)
 var hubRgName = 'rg-${naming.base(marker, env, regionCode)}-hub'
 // Decoy spoke RG: production-looking name, no marker.
 var spokeRgName = 'rg-${spokeNamePrefix}-${regionCode}'
@@ -122,6 +135,15 @@ module spoke 'modules/spoke/honeypotSpoke.bicep' = {
 
 @description('Honeypot spoke resource group name.')
 output honeypotResourceGroupName string = spokeRg.name
+
+@description('Deployment mode: true if the production-simulation stage built a simulated hub, false if the honeypot consumed an existing production hub as an input.')
+output deployProduction bool = deployProduction
+
+@description('Honeypot-only contract check: must be true. False means deployProduction=false was deployed without an existingHubVnetId, so the spoke has no monitoring peering. tests/verify_network.sh asserts this is true.')
+output hubContractSatisfied bool = hubContractSatisfied
+
+@description('The production hub VNet the honeypot spoke peers to (created in production-sim mode, or the supplied input).')
+output effectiveHubVnetId string = effectiveHubVnetId
 
 @description('Decoy spoke VNet resource ID.')
 output honeypotVnetId string = spoke.outputs.vnetId

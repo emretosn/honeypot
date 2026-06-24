@@ -5,6 +5,13 @@ param location = 'westeurope'
 param regionCode = 'weu'
 param marker = 'hp'
 
+// PRODUCTION-SIM stage: this project stands up a lightweight simulated *production*
+// environment (thin hub) so the honeypot can be demonstrated deploying alongside it. A REAL
+// deployment sets deployProduction=false and supplies existingHubVnetId (the customer's
+// production hub) instead.
+param deployProduction = true
+param existingHubVnetId = ''
+
 // From the foundation deployment output (logAnalyticsWorkspaceId).
 param workspaceId = '/subscriptions/REPLACE_SUB/resourceGroups/rg-hp-dev-weu-mgmt/providers/Microsoft.OperationalInsights/workspaces/log-hp-dev-weu'
 

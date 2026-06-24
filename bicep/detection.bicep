@@ -20,6 +20,9 @@ param signInAllowlistIps array = []
 @description('Enable the best-effort enumeration-anomaly rule (noisier, P-licensed sources).')
 param enableEnumerationRule bool = false
 
+@description('Enable the decoy resource rules (Key Vault / storage). Turn on only AFTER the network module is deployed, so the referenced tables/columns exist. Off by default so the identity stage deploys cleanly.')
+param enableResourceRules bool = false
+
 module sentinel 'modules/detection/sentinelOnboarding.bicep' = {
   name: 'sentinel-onboarding'
   params: {
@@ -64,14 +67,14 @@ var qKvSecretRead = join([
   '| where ResourceProvider == "MICROSOFT.KEYVAULT"'
   '| where Resource =~ "${decoyKeyVaultName}"'
   '| where OperationName in ("SecretGet", "SecretList", "VaultGet")'
-  '| extend ActorIp = CallerIPAddress, Actor = identity_claim_upn_s'
-  '| project TimeGenerated, OperationName, Resource, Actor, ActorIp, requestUri_s'
+  '| extend ActorIp = columnifexists("CallerIPAddress", ""), Actor = columnifexists("identity_claim_upn_s", "")'
+  '| project TimeGenerated, OperationName, Resource, Actor, ActorIp'
 ], '\n')
 
 var qResourceAccess = join([
   'StorageBlobLogs'
   '| where AccountName =~ "${decoyStorageAccountName}"'
-  '| extend ActorIp = CallerIpAddress'
+  '| extend ActorIp = columnifexists("CallerIpAddress", "")'
   '| project TimeGenerated, AccountName, OperationName, Uri, ActorIp, AuthenticationType'
 ], '\n')
 
@@ -154,7 +157,7 @@ module ruleSignIn 'modules/detection/scheduledRule.bicep' = {
 }
 
 // 4. Read of a decoy Key Vault secret — resource tripwire.
-module ruleKvSecretRead 'modules/detection/scheduledRule.bicep' = {
+module ruleKvSecretRead 'modules/detection/scheduledRule.bicep' = if (enableResourceRules) {
   name: 'rule-decoy-kv-read'
   dependsOn: [sentinel]
   params: {
@@ -175,7 +178,7 @@ module ruleKvSecretRead 'modules/detection/scheduledRule.bicep' = {
 }
 
 // 5. Any access to decoy storage — resource tripwire.
-module ruleResourceAccess 'modules/detection/scheduledRule.bicep' = {
+module ruleResourceAccess 'modules/detection/scheduledRule.bicep' = if (enableResourceRules) {
   name: 'rule-decoy-resource-access'
   dependsOn: [sentinel]
   params: {

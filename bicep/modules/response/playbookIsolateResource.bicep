@@ -141,7 +141,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                         name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
                       }
                     }
-                    method: 'put'
+                    method: 'post'
                     path: '/Incidents/Comment'
                     body: {
                       incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
@@ -160,7 +160,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                           name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
                         }
                       }
-                      method: 'put'
+                      method: 'post'
                       path: '/Incidents/Comment'
                       body: {
                         incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
