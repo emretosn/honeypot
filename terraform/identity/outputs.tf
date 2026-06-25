@@ -54,6 +54,24 @@ output "deploy_production" {
   description = "Whether the identity plane was deployed in production-simulation mode (seeds simulated production identities)."
 }
 
+output "reachable_app" {
+  value = {
+    app_id        = azuread_application.reachable.client_id
+    app_object_id = azuread_application.reachable.object_id
+    sp_object_id  = azuread_service_principal.reachable.object_id
+    display_name  = azuread_application.reachable.display_name
+  }
+  description = "Reachable decoy app/SP the foothold can take over (Phase 04). Consumed by detection (credential-add + SP sign-in rules)."
+}
+
+output "reachable_sp_rbac_scoped" {
+  value = {
+    rg_owner       = length(azurerm_role_assignment.sp_rg_owner) > 0
+    kv_secrets_read = length(azurerm_role_assignment.sp_kv_secrets) > 0
+  }
+  description = "Whether the decoy SP's contained Azure RBAC (Owner on decoy RG, KV Secrets User) is in place. False until the network is deployed and the ids are passed."
+}
+
 output "lure_password" {
   value       = random_password.lure.result
   sensitive   = true

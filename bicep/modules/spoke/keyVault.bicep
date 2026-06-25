@@ -15,6 +15,19 @@ param workspaceId string
 @description('Resource tags.')
 param tags object = {}
 
+@description('Honeytoken secrets to plant in the decoy vault — name/value pairs. These are inert canaries (never real). Reading any of them is a tripwire (the decoy-kv-read rule). Default plants a couple of credential-shaped breadcrumbs.')
+param honeytokenSecrets array = [
+  {
+    name: 'core-prod-sql-connection'
+    #disable-next-line no-hardcoded-env-urls
+    value: 'Server=sql-core-prod.database.windows.net;Database=core;User Id=svc_app;Password=Wint3r-2026-Core!;'
+  }
+  {
+    name: 'svc-deploy-credentials'
+    value: 'svc-deploy@core-prod / Depl0y-Core-2026!'
+  }
+]
+
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: name
   location: location
@@ -55,6 +68,19 @@ resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
     ]
   }
 }
+
+// Plant the honeytoken secrets via the CONTROL plane (Microsoft.KeyVault/vaults/secrets), which
+// works with the deployer's Contributor rights even on an RBAC-authorized vault — no data-plane
+// role needed at deploy time. Values are inert canaries; reading any one is a tripwire.
+resource secrets 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
+  for s in honeytokenSecrets: {
+    parent: vault
+    name: s.name
+    properties: {
+      value: s.value
+    }
+  }
+]
 
 output id string = vault.id
 output name string = vault.name

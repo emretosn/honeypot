@@ -22,6 +22,7 @@ jq \
   | .identity.lureRoleDefinitionId = $tf.lure_role_definition_id.value
   | .identity.decoyGroupIds = [ $tf.decoy_group_id.value ]
   | .identity.decoyAppIds = $tf.decoy_app_ids.value
+  | .identity.reachableApp = { "$comment": (.identity.reachableApp."$comment" // "Reachable escalation edge."), appId: $tf.reachable_app.value.app_id, appObjectId: $tf.reachable_app.value.app_object_id, spObjectId: $tf.reachable_app.value.sp_object_id, displayName: $tf.reachable_app.value.display_name }
   | .allowlist.breakGlassObjectIds = ($tf.break_glass_object_ids.value // [])
   | .allowlist.agentNamedLocationCidrs = (.allowlist.agentNamedLocationCidrs // [])
   ' "$INV" > "$tmp"

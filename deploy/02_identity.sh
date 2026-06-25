@@ -13,6 +13,18 @@ require_login
 TF_DIR="$REPO_ROOT/terraform/identity"
 export TF_VAR_verified_domain="$VERIFIED_DOMAIN"
 
+# Reachable-edge RBAC payoff (Phase 04): if the network is already deployed, pass the decoy RG +
+# Key Vault ids from the inventory so the decoy SP gets Owner-on-RG + KV-Secrets-User (contained).
+# Empty on the first pass (before the network exists) — the role assignments are then skipped.
+INV="$REPO_ROOT/inventory/decoy-inventory.json"
+if [ -f "$INV" ]; then
+  RG_ID=$(jq -r '.network.honeypotResourceGroupId // ""' "$INV")
+  KV_ID=$(jq -r '.network.keyVaultId // ""' "$INV")
+  [ -n "$RG_ID" ] && export TF_VAR_decoy_resource_group_id="$RG_ID"
+  [ -n "$KV_ID" ] && export TF_VAR_decoy_key_vault_id="$KV_ID"
+  if [ -n "$RG_ID" ]; then info "Reachable-edge RBAC will target decoy RG (and KV) from inventory"; else info "Network not yet in inventory — reachable-edge RBAC skipped this pass"; fi
+fi
+
 info "terraform init (local backend)"
 terraform -chdir="$TF_DIR" init -input=false
 

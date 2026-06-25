@@ -118,6 +118,26 @@ variable "agent_named_location_cidrs" {
   description = "CIDRs of the (optional) activity agent. Empty = no agent yet."
 }
 
+# --- Reachable escalation edge (Phase 04). See docs/sp_path_alternatives.md. ---
+
+variable "reachable_app_name" {
+  type        = string
+  default     = "core-automation-runner"
+  description = "Production-plausible name of the decoy app the foothold can take over (a normal dev would own one app reg). NO honeypot marker."
+}
+
+variable "decoy_resource_group_id" {
+  type        = string
+  default     = ""
+  description = "Resource ID of the decoy honeypot RG (from inventory.network.honeypotResourceGroupId). When set, the decoy SP is granted Owner on it (the contained payoff). Empty = skip (identity can deploy before the network exists)."
+}
+
+variable "decoy_key_vault_id" {
+  type        = string
+  default     = ""
+  description = "Resource ID of the decoy Key Vault (from inventory.network.keyVaultId). When set, the decoy SP is granted Key Vault Secrets User so it can read the honeytoken secrets. Empty = skip."
+}
+
 # --- Production/honeypot boundary & response contract inputs ---
 
 variable "deploy_production" {

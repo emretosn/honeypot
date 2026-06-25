@@ -45,6 +45,8 @@ required_keys=(
   '.identity.lureRoleDefinitionId'
   '.identity.decoyGroupIds'
   '.identity.decoyAppIds'
+  '.identity.reachableApp.appId'
+  '.identity.reachableApp.spObjectId'
   '.network.honeypotResourceGroupId'
   '.network.keyVaultId'
   '.network.storageAccountId'

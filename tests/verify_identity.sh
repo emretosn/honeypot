@@ -62,7 +62,36 @@ for APP_ID in $(jq -r '.identity.decoyAppIds[]' "$INV"); do
   fi
 done
 
-# 6. OPSEC: no honeypot marker in attacker-visible names.
+# 6. Reachable edge (Phase 04): the decoy SP exists, the foothold can take it over, the SP has
+#    NO consented Graph app roles (the god-mode request is unconsented), and its Azure RBAC is
+#    scoped ONLY to the decoy RG/KV — the contained payoff.
+REACH_APP_ID=$(jq -r '.identity.reachableApp.appId // ""' "$INV")
+REACH_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
+if [ -n "$REACH_APP_ID" ] && [ -n "$REACH_SP_ID" ]; then
+  az ad sp show --id "$REACH_SP_ID" >/dev/null 2>&1 && pass "reachable decoy SP exists" || fail "reachable decoy SP missing"
+  # No CONSENTED Graph app roles (god-mode is requested, never granted).
+  RGRANTS=$(az rest --method get --url "https://graph.microsoft.com/v1.0/servicePrincipals/$REACH_SP_ID/appRoleAssignments" 2>/dev/null | jq '.value | length')
+  [ "${RGRANTS:-0}" -eq 0 ] && pass "reachable SP has ZERO consented Graph app roles (god-mode unconsented)" \
+    || fail "reachable SP has $RGRANTS consented app-role grant(s) — that is a real backdoor, not a decoy!"
+  # Azure RBAC, if present, must be scoped ONLY to the decoy RG/KV (never a subscription/MG).
+  RG_ID=$(jq -r '.network.honeypotResourceGroupId // ""' "$INV")
+  BADSCOPE=$(az role assignment list --assignee "$REACH_SP_ID" --all -o json 2>/dev/null \
+    | jq -r --arg rg "$RG_ID" '[.[] | select((.scope|startswith($rg))|not)] | length')
+  if [ -n "$RG_ID" ]; then
+    [ "${BADSCOPE:-0}" -eq 0 ] && pass "reachable SP Azure RBAC scoped ONLY to the decoy RG/KV (contained)" \
+      || fail "reachable SP has $BADSCOPE RBAC assignment(s) OUTSIDE the decoy RG — containment broken!"
+  else
+    echo "NOTE: network not in inventory yet — reachable-edge RBAC not asserted (deploy network + re-apply identity)."
+  fi
+  # Foothold ownership (the takeover primitive) — informational.
+  OWN=$(az ad app owner list --id "$REACH_APP_ID" -o json 2>/dev/null | jq 'length')
+  [ "${OWN:-0}" -ge 1 ] && pass "reachable app has $OWN owner(s) (foothold takeover primitive)" \
+    || echo "NOTE: reachable app has no owners (set foothold_principal_object_id to seed the edge)."
+else
+  echo "NOTE: reachable edge not in inventory (Phase 04 not applied / synced) — skipping its checks."
+fi
+
+# 7. OPSEC: no honeypot marker in attacker-visible names.
 NAMES=$(az ad user show --id "$LURE_ID" --query '{u:userPrincipalName,d:displayName}' -o tsv; \
         az ad group show --group "$GROUP_ID" --query displayName -o tsv 2>/dev/null)
 echo "$NAMES" | grep -iqE 'honey|decoy|\bhp\b|trap|fake' \
