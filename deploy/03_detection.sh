@@ -12,12 +12,21 @@ INV="$REPO_ROOT/inventory/decoy-inventory.json"
 LURE_UPN=$(jq -r '.identity.lure.upn' "$INV" 2>/dev/null)
 [ -n "$LURE_UPN" ] && [ "$LURE_UPN" != "null" ] || die "lure UPN missing in inventory — run tests/sync_inventory.sh."
 
+# Reachable-edge ids (Phase 04) — enable the invited-action rules only when they exist.
+REACHABLE_APP_ID=$(jq -r '.identity.reachableApp.appId // ""' "$INV")
+REACHABLE_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
+ENABLE_REACHABLE_EDGE_RULES="false"
+[ -n "$REACHABLE_APP_ID" ] && [ -n "$REACHABLE_SP_ID" ] && ENABLE_REACHABLE_EDGE_RULES="true"
+
 WS_ID="/subscriptions/$CURRENT_SUB/resourceGroups/$MGMT_RG/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE"
 
-# Optional: decoy resource names (only meaningful once the network module is deployed). The
-# KV/storage rules deploy regardless and simply stay silent until those resources exist.
-KV_NAME="${DECOY_KEY_VAULT_NAME:-kv-not-deployed}"
-SA_NAME="${DECOY_STORAGE_ACCOUNT_NAME:-stnotdeployed}"
+# Optional: decoy resource names (only meaningful once the network module is deployed). Derived
+# from the inventory when present; the KV/storage rules deploy regardless and stay silent until
+# those resources exist.
+KV_NAME="${DECOY_KEY_VAULT_NAME:-$(basename "$(jq -r '.network.keyVaultId // ""' "$INV")")}"
+SA_NAME="${DECOY_STORAGE_ACCOUNT_NAME:-$(basename "$(jq -r '.network.storageAccountId // ""' "$INV")")}"
+[ -n "$KV_NAME" ] || KV_NAME="kv-not-deployed"
+[ -n "$SA_NAME" ] || SA_NAME="stnotdeployed"
 
 # --- 1. Entra ID -> Log Analytics diagnostic settings (tenant-level aadiam resource) --------
 info "Configuring Entra diagnostic settings (AuditLogs + SignInLogs -> $WORKSPACE)"
@@ -26,7 +35,8 @@ BODY=$(jq -n --arg ws "$WS_ID" '{
     workspaceId: $ws,
     logs: [
       { category: "AuditLogs",  enabled: true },
-      { category: "SignInLogs", enabled: true }
+      { category: "SignInLogs", enabled: true },
+      { category: "ServicePrincipalSignInLogs", enabled: true }
     ]
   }
 }')
@@ -49,8 +59,10 @@ az deployment group create \
   --parameters workspaceName="$WORKSPACE" lureUpn="$LURE_UPN" \
                decoyKeyVaultName="$KV_NAME" decoyStorageAccountName="$SA_NAME" \
                enableResourceRules="$ENABLE_RESOURCE_RULES" \
+               reachableAppId="$REACHABLE_APP_ID" reachableSpObjectId="$REACHABLE_SP_ID" \
+               enableReachableEdgeRules="$ENABLE_REACHABLE_EDGE_RULES" \
   -o none
-ok "detection deployed (resource rules: $ENABLE_RESOURCE_RULES)"
+ok "detection deployed (resource rules: $ENABLE_RESOURCE_RULES, reachable-edge rules: $ENABLE_REACHABLE_EDGE_RULES)"
 
 echo
 ok "Detection is live. Verify (paths per Microsoft docs):"

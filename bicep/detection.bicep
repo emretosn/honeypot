@@ -17,8 +17,17 @@ param decoyStorageAccountName string
 @description('IP addresses allowlisted from sign-in detection (e.g. the activity agent). Empty = none.')
 param signInAllowlistIps array = []
 
+@description('App (client) ID of the reachable decoy app the foothold can take over (from inventory.identity.reachableApp.appId). Empty disables the credential-add rule.')
+param reachableAppId string = ''
+
+@description('Object ID of the reachable decoy service principal (from inventory.identity.reachableApp.spObjectId). Empty disables the SP sign-in rule.')
+param reachableSpObjectId string = ''
+
 @description('Enable the best-effort enumeration-anomaly rule (noisier, P-licensed sources).')
 param enableEnumerationRule bool = false
+
+@description('Enable the reachable-edge invited-action rules (credential-add on the decoy app + sign-in as the decoy SP). Turn on once the reachable app/SP exist in the inventory.')
+param enableReachableEdgeRules bool = false
 
 @description('Enable the decoy resource rules (Key Vault / storage). Turn on only AFTER the network module is deployed, so the referenced tables/columns exist. Off by default so the identity stage deploys cleanly.')
 param enableResourceRules bool = false
@@ -40,8 +49,11 @@ var qPasswordReset = join([
   '| mv-expand TargetResources'
   '| extend targetUpn = tostring(TargetResources.userPrincipalName)'
   '| where targetUpn =~ "${lureUpn}"'
-  '| extend Actor = tostring(InitiatedBy.user.userPrincipalName), ActorIp = tostring(InitiatedBy.user.ipAddress)'
-  '| project TimeGenerated, OperationName, targetUpn, Actor, ActorIp'
+  '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
+  '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
+  '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
+  '| extend targetId = tostring(TargetResources.id)'
+  '| project TimeGenerated, OperationName, targetUpn, targetId, Actor, ActorId, ActorIp'
 ], '\n')
 
 var qRoleEscalation = join([
@@ -49,17 +61,21 @@ var qRoleEscalation = join([
   '| where OperationName has_any ("Add member to role", "Add eligible member to role", "activate", "Add member to role in PIM")'
   '| mv-expand TargetResources'
   '| extend targetUpn = tostring(TargetResources.userPrincipalName)'
-  '| extend initiator = tostring(InitiatedBy.user.userPrincipalName)'
+  '| extend targetId = tostring(TargetResources.id)'
+  '| extend initiator = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
+  '| extend initiatorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
   '| where targetUpn =~ "${lureUpn}" or initiator =~ "${lureUpn}"'
-  '| extend ActorIp = tostring(InitiatedBy.user.ipAddress)'
-  '| project TimeGenerated, OperationName, targetUpn, initiator, ActorIp'
+  '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
+  '| project TimeGenerated, OperationName, targetUpn, targetId, initiator, initiatorId, ActorIp'
 ], '\n')
 
 var qSignIn = join([
   'SigninLogs'
   '| where UserPrincipalName =~ "${lureUpn}"'
   '| where IPAddress !in (${allowlistLiteral})'
-  '| project TimeGenerated, UserPrincipalName, IPAddress, AppDisplayName, ResultType, Location'
+  '| extend LureId = tostring(coalesce(UserId, ""))'
+  '| extend LureUpn = tostring(coalesce(UserPrincipalName, Identity, "${lureUpn}"))'
+  '| project TimeGenerated, LureUpn, LureId, IPAddress, AppDisplayName, ResultType, Location'
 ], '\n')
 
 var qKvSecretRead = join([
@@ -85,6 +101,27 @@ var qEnumeration = join([
   '| project TimeGenerated, RequestMethod, RequestUri, ResponseStatusCode, ActorAppId, IPAddress'
 ], '\n')
 
+// Reachable-edge invited actions (Phase 04). The decoy app/SP filters come from the inventory.
+var qCredentialAdd = join([
+  'AuditLogs'
+  '| where OperationName has_any ("Add service principal credentials", "Update application – Certificates and secrets management", "Add password to application", "Add key to application", "Update application")'
+  '| mv-expand TargetResources'
+  '| extend targetId = tostring(TargetResources.id)'
+  '| where targetId == "${reachableAppId}" or targetId == "${reachableSpObjectId}"'
+  '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
+  '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
+  '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
+  '| project TimeGenerated, OperationName, targetId, Actor, ActorId, ActorIp'
+], '\n')
+
+var qSpSignIn = join([
+  'AADServicePrincipalSignInLogs'
+  '| where ServicePrincipalId == "${reachableSpObjectId}"'
+  '| extend SpName = tostring(coalesce(ServicePrincipalName, "decoy-sp"))'
+  '| extend ActorIp = tostring(coalesce(IPAddress, ""))'
+  '| project TimeGenerated, SpName, ServicePrincipalId, ActorIp, ResultType, AppId'
+], '\n')
+
 // 1. Password reset / change targeting the lure — strong tripwire.
 module rulePasswordReset 'modules/detection/scheduledRule.bicep' = {
   name: 'rule-lure-password-reset'
@@ -100,7 +137,10 @@ module rulePasswordReset 'modules/detection/scheduledRule.bicep' = {
     entityMappings: [
       {
         entityType: 'Account'
-        fieldMappings: [{ identifier: 'FullName', columnName: 'Actor' }]
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'Actor' }
+          { identifier: 'AadUserId', columnName: 'ActorId' }
+        ]
       }
       {
         entityType: 'IP'
@@ -125,7 +165,21 @@ module ruleRoleEscalation 'modules/detection/scheduledRule.bicep' = {
     entityMappings: [
       {
         entityType: 'Account'
-        fieldMappings: [{ identifier: 'FullName', columnName: 'initiator' }]
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'initiator' }
+          { identifier: 'AadUserId', columnName: 'initiatorId' }
+        ]
+      }
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'targetUpn' }
+          { identifier: 'AadUserId', columnName: 'targetId' }
+        ]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
       }
     ]
   }
@@ -146,7 +200,10 @@ module ruleSignIn 'modules/detection/scheduledRule.bicep' = {
     entityMappings: [
       {
         entityType: 'Account'
-        fieldMappings: [{ identifier: 'FullName', columnName: 'UserPrincipalName' }]
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'LureUpn' }
+          { identifier: 'AadUserId', columnName: 'LureId' }
+        ]
       }
       {
         entityType: 'IP'
@@ -218,6 +275,60 @@ module ruleEnumeration 'modules/detection/scheduledRule.bicep' = if (enableEnume
       {
         entityType: 'IP'
         fieldMappings: [{ identifier: 'Address', columnName: 'IPAddress' }]
+      }
+    ]
+  }
+}
+
+// 7. Reachable edge: a credential was added to the decoy app the foothold owns — the invited
+//    takeover action. Near-100% TP.
+module ruleCredentialAdd 'modules/detection/scheduledRule.bicep' = if (enableReachableEdgeRules) {
+  name: 'rule-reachable-credential-add'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'reachable-credential-add')
+    displayName: 'Honeypot: credential added to decoy service principal/app'
+    ruleDescription: 'A client secret or certificate was added to the decoy reachable app/SP. This is the invited takeover action — an attacker who owns the app adding a credential to act as the SP. No legitimate process does this.'
+    severity: 'High'
+    tactics: ['Persistence', 'PrivilegeEscalation']
+    query: qCredentialAdd
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'Actor' }
+          { identifier: 'AadUserId', columnName: 'ActorId' }
+        ]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
+      }
+    ]
+  }
+}
+
+// 8. Reachable edge: a sign-in AS the decoy service principal — the attacker has taken it over.
+module ruleSpSignIn 'modules/detection/scheduledRule.bicep' = if (enableReachableEdgeRules) {
+  name: 'rule-reachable-sp-signin'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'reachable-sp-signin')
+    displayName: 'Honeypot: sign-in as decoy service principal'
+    ruleDescription: 'A sign-in occurred as the decoy reachable service principal. The SP has no legitimate use, so any authentication as it is attacker-controlled (and MFA-immune, the realistic escalation path).'
+    severity: 'High'
+    tactics: ['PrivilegeEscalation', 'DefenseEvasion']
+    query: qSpSignIn
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [{ identifier: 'AadUserId', columnName: 'ServicePrincipalId' }]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
       }
     ]
   }

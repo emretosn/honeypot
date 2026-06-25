@@ -13,5 +13,11 @@ param decoyStorageAccountName = 'stcoreprodREPLACE'
 // Allowlist the activity-agent source IPs from sign-in detection (empty = none yet).
 param signInAllowlistIps = []
 
+// Reachable-edge (Phase 04) — decoy app/SP ids from inventory.identity.reachableApp.
+// deploy/03_detection.sh injects these from the inventory; values here are for static validation.
+param reachableAppId = ''
+param reachableSpObjectId = ''
+param enableReachableEdgeRules = false
+
 // Enumeration rule is best-effort and noisier; off by default.
 param enableEnumerationRule = false
