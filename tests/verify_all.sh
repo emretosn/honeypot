@@ -28,7 +28,9 @@ run() {
 
 section "Static validation (IaC builds)"
 run "bicep: foundation" az bicep build-params --file bicep/parameters/foundation.dev.bicepparam --stdout
-run "bicep: network"    az bicep build-params --file bicep/parameters/network.dev.bicepparam --stdout
+run "bicep: production-sim" az bicep build-params --file bicep/parameters/production.dev.bicepparam --stdout
+run "bicep: honeypot"   az bicep build-params --file bicep/parameters/honeypot.dev.bicepparam --stdout
+run "bicep: network (orchestrator)" az bicep build-params --file bicep/parameters/network.dev.bicepparam --stdout
 run "bicep: detection"  az bicep build-params --file bicep/parameters/detection.dev.bicepparam --stdout
 run "bicep: response"   az bicep build-params --file bicep/parameters/response.dev.bicepparam --stdout
 run "terraform: identity validate" bash -c 'cd terraform/identity && terraform init -backend=false -input=false >/dev/null && terraform validate'

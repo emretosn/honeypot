@@ -1,8 +1,6 @@
-metadata description = 'Subscription-scope entrypoint for the hub-spoke network. Creates the hub VNet (internal plane) and the honeypot spoke (decoy plane, production-looking). The honeypot spoke is also deployable standalone against a pre-existing hub by passing existingHubVnetId. A minimal production spoke is optional and only for production-simulation realism.'
+metadata description = 'Network ORCHESTRATOR for the demo. Composes the two independent modules: production.bicep (the simulated existing environment — hub + representative production spoke) and honeypot.bicep (the product — the honeypot spoke). With deployProduction=true it builds the simulated production and deploys the honeypot alongside it. With deployProduction=false (a real tenant) it builds NOTHING for production and deploys only the honeypot against the supplied existing hub. The honeypot and production modules are also deployable standalone.'
 
 targetScope = 'subscription'
-
-import * as naming from 'modules/naming/naming.bicep'
 
 @description('Environment short name.')
 param env string = 'dev'
@@ -10,10 +8,10 @@ param env string = 'dev'
 @description('Location for all network resources.')
 param location string = 'westeurope'
 
-@description('Region short code for internal-plane names.')
+@description('Region short code.')
 param regionCode string = 'weu'
 
-@description('Honeypot marker for the internal plane (hub). Never used on decoy spoke names.')
+@description('Honeypot marker for the internal plane (hub).')
 param marker string = 'hp'
 
 @description('Log Analytics workspace resource ID (from the foundation deployment).')
@@ -22,113 +20,81 @@ param workspaceId string
 @description('Tenant ID for the decoy Key Vault.')
 param tenantId string = subscription().tenantId
 
-@description('Hub VNet address space.')
-param hubAddressPrefix string = '10.0.0.0/16'
-
-@description('Production address space the honeypot must not reach (egress deny).')
-param productionAddressPrefixes array = ['10.10.0.0/16']
-
-@description('Production-simulation switch. false (default, HONEYPOT-ONLY mode): the platform creates NO hub and deploys the honeypot spoke alongside an EXISTING production hub supplied via existingHubVnetId — this is how the honeypot drops into a real hub-spoke. true (PRODUCTION-SIM mode): this project also stands up a lightweight simulated *production* environment (thin hub) so the honeypot can be demonstrated alongside it. A real deployment MUST use deployProduction=false and supply existingHubVnetId + workspaceId as inputs.')
+@description('PRODUCTION-SIMULATION switch. false (default, real deployment): build NO production; deploy the honeypot alongside the existing hub passed via existingHubVnetId. true (demo): build the simulated production (hub + representative spoke) and deploy the honeypot alongside it.')
 param deployProduction bool = false
 
-@description('Resource ID of a pre-existing (production) hub VNet to peer the honeypot spoke to (monitoring only). REQUIRED when deployProduction=false; ignored when deployProduction builds its own simulated hub.')
+@description('Resource ID of a pre-existing (production) hub VNet. REQUIRED when deployProduction=false.')
 param existingHubVnetId string = ''
 
-@description('Decoy spoke name prefix. Production-looking, NO honeypot marker. e.g. "core-prod".')
+@description('Hub VNet address space (production-sim only).')
+param hubAddressPrefix string = '10.0.0.0/16'
+
+@description('Representative production spoke name prefix (production-sim only).')
+param prodSpokeNamePrefix string = 'erp-prod'
+
+@description('Representative production spoke address space (production-sim only). Also what the honeypot denies egress toward when deployProduction=true.')
+param prodSpokeAddressPrefix string = '10.10.0.0/16'
+
+@description('Globally-unique production storage account name (production-sim only).')
+param prodStorageAccountName string = ''
+
+@description('Production address space the honeypot denies egress toward. Used directly when deployProduction=false; in production-sim mode it is taken from the built production spoke.')
+param productionAddressPrefixes array = ['10.10.0.0/16']
+
+@description('Decoy spoke name prefix. Production-looking, NO honeypot marker.')
 param spokeNamePrefix string = 'core-prod'
 
 @description('Decoy spoke VNet address space.')
 param spokeAddressPrefix string = '10.20.0.0/16'
 
-@description('Include the decoy VM (SSH lure) + the App Gateway that fronts it. Off by default: the spoke exposes only the decoy Key Vault + storage, needs no SSH key, and skips the slow App Gateway provision.')
+@description('Include the decoy VM (SSH lure) + the App Gateway that fronts it. Off by default.')
 param includeDecoyVm bool = false
 
-@description('SSH public key for the decoy VM admin user. Required only when includeDecoyVm is true.')
+@description('SSH public key for the decoy VM. Required only when includeDecoyVm is true.')
 @secure()
 param decoyVmSshPublicKey string = ''
 
 @description('Base64 cloud-init planting fake-prod breadcrumbs on the decoy VM.')
 param decoyVmCustomDataBase64 string = ''
 
-@description('Globally-unique decoy Key Vault name (3-24 chars, production-looking).')
+@description('Globally-unique decoy Key Vault name.')
 param keyVaultName string
 
-@description('Globally-unique decoy storage account name (3-24 lowercase alphanumeric, production-looking).')
+@description('Globally-unique decoy storage account name.')
 param storageAccountName string
 
-@description('Internal-plane tags (hub/management). Marker allowed.')
-param internalTags object = {
-  project: 'honeypot'
-  plane: 'internal-mgmt'
-  managedBy: 'iac'
-}
-
-@description('Decoy-plane tags. Honeypot ownership lives here, NOT in names.')
-param decoyTags object = {
-  environment: 'production'
-  workload: 'core-services'
-  managedBy: 'iac'
-}
-
-// PRODUCTION/HONEYPOT boundary: the hub belongs to the *production* environment, not the
-// honeypot platform. The platform never creates it — only the production-simulation stage
-// (deployProduction=true) does, and only if an existing production hub was not supplied. In
-// honeypot-only mode the production hub MUST arrive as an input.
-var createHub = deployProduction && empty(existingHubVnetId)
-
-// Honeypot-only contract: a real deployment must supply the production hub it deploys
-// alongside. Surfaced as an output so misconfiguration (deployProduction=false with no hub) is
-// visible in deployment outputs and asserted by tests/verify_network.sh, without depending on
-// experimental Bicep features.
-var hubContractSatisfied = deployProduction || !empty(existingHubVnetId)
-var hubRgName = 'rg-${naming.base(marker, env, regionCode)}-hub'
-// Decoy spoke RG: production-looking name, no marker.
-var spokeRgName = 'rg-${spokeNamePrefix}-${regionCode}'
-
-resource hubRg 'Microsoft.Resources/resourceGroups@2024-03-01' = if (createHub) {
-  name: hubRgName
-  location: location
-  tags: internalTags
-}
-
-module hubVnet 'modules/network/vnet.bicep' = if (createHub) {
-  name: 'hub-vnet'
-  scope: hubRg
+// PRODUCTION (simulated environment) — built only in demo mode.
+module production 'production.bicep' = if (deployProduction) {
+  name: 'production-sim'
   params: {
-    name: 'vnet-${naming.base(marker, env, regionCode)}-hub'
+    env: env
     location: location
-    tags: internalTags
-    addressPrefixes: [hubAddressPrefix]
-    subnets: [
-      {
-        name: 'monitoring-subnet'
-        prefix: cidrSubnet(hubAddressPrefix, 24, 0)
-        nsgId: ''
-      }
-    ]
+    regionCode: regionCode
+    marker: marker
+    hubAddressPrefix: hubAddressPrefix
+    prodSpokeNamePrefix: prodSpokeNamePrefix
+    prodSpokeAddressPrefix: prodSpokeAddressPrefix
+    prodStorageAccountName: prodStorageAccountName
   }
 }
 
-var effectiveHubVnetId = createHub ? hubVnet!.outputs.id : existingHubVnetId
+// The hub the honeypot deploys alongside: the simulated one (demo) or the supplied real one.
+var effectiveHubVnetId = deployProduction ? production!.outputs.hubVnetId : existingHubVnetId
+// The production range the honeypot denies egress toward.
+var effectiveProductionPrefixes = deployProduction ? [production!.outputs.productionAddressPrefix] : productionAddressPrefixes
 
-resource spokeRg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
-  name: spokeRgName
-  location: location
-  tags: decoyTags
-}
-
-module spoke 'modules/spoke/honeypotSpoke.bicep' = {
-  name: 'honeypot-spoke'
-  scope: spokeRg
+// HONEYPOT (the product) — always deployed; consumes the hub as an input.
+module honeypot 'honeypot.bicep' = {
+  name: 'honeypot'
   params: {
-    namePrefix: spokeNamePrefix
     location: location
-    tags: decoyTags
-    vnetAddressPrefix: spokeAddressPrefix
-    productionAddressPrefixes: productionAddressPrefixes
-    hubVnetId: effectiveHubVnetId
+    regionCode: regionCode
     workspaceId: workspaceId
     tenantId: tenantId
+    hubVnetId: effectiveHubVnetId
+    productionAddressPrefixes: effectiveProductionPrefixes
+    spokeNamePrefix: spokeNamePrefix
+    spokeAddressPrefix: spokeAddressPrefix
     includeDecoyVm: includeDecoyVm
     decoyVmSshPublicKey: decoyVmSshPublicKey
     decoyVmCustomDataBase64: decoyVmCustomDataBase64
@@ -137,29 +103,29 @@ module spoke 'modules/spoke/honeypotSpoke.bicep' = {
   }
 }
 
-@description('Honeypot spoke resource group name.')
-output honeypotResourceGroupName string = spokeRg.name
-
-@description('Deployment mode: true if the production-simulation stage built a simulated hub, false if the honeypot consumed an existing production hub as an input.')
+@description('Whether the simulated production environment was built.')
 output deployProduction bool = deployProduction
 
-@description('Honeypot-only contract check: must be true. False means deployProduction=false was deployed without an existingHubVnetId, so the spoke has no monitoring peering. tests/verify_network.sh asserts this is true.')
-output hubContractSatisfied bool = hubContractSatisfied
+@description('Contract check: true if the honeypot was given a hub to deploy alongside.')
+output hubContractSatisfied bool = honeypot.outputs.hubContractSatisfied
 
-@description('The production hub VNet the honeypot spoke peers to (created in production-sim mode, or the supplied input).')
+@description('The hub VNet the honeypot peers to (simulated or supplied).')
 output effectiveHubVnetId string = effectiveHubVnetId
 
+@description('Honeypot spoke resource group name.')
+output honeypotResourceGroupName string = honeypot.outputs.honeypotResourceGroupName
+
 @description('Decoy spoke VNet resource ID.')
-output honeypotVnetId string = spoke.outputs.vnetId
+output honeypotVnetId string = honeypot.outputs.honeypotVnetId
 
 @description('Internet-facing decoy App Gateway public IP.')
-output appGatewayPublicIp string = spoke.outputs.appGatewayPublicIp
+output appGatewayPublicIp string = honeypot.outputs.appGatewayPublicIp
 
-@description('Decoy VM resource ID — input to the response module isolation playbook.')
-output decoyVmId string = spoke.outputs.decoyVmId
+@description('Decoy VM resource ID.')
+output decoyVmId string = honeypot.outputs.decoyVmId
 
 @description('Decoy Key Vault resource ID.')
-output keyVaultId string = spoke.outputs.keyVaultId
+output keyVaultId string = honeypot.outputs.keyVaultId
 
 @description('Decoy storage account resource ID.')
-output storageAccountId string = spoke.outputs.storageAccountId
+output storageAccountId string = honeypot.outputs.storageAccountId
