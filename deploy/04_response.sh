@@ -18,6 +18,22 @@ SPOKE_RG_ID="/subscriptions/$CURRENT_SUB/resourceGroups/$SPOKE_RG_NAME"
 
 DRY_RUN="${DRY_RUN:-true}"
 
+# Two-key safety guard, sourced from the single source of truth (inventory):
+#   decoyObjectIds   = the decoy identities the playbook MAY disable (lure + personas).
+#   allowlistObjectIds = real break-glass / agent IDs that must NEVER be disabled.
+# The playbook disables an account only if it is in decoyObjectIds AND not in the allowlist.
+INV="$REPO_ROOT/inventory/decoy-inventory.json"
+DECOY_IDS='[]'
+ALLOWLIST_IDS='[]'
+if [ -f "$INV" ]; then
+  DECOY_IDS=$(jq -c '[.identity.lure.objectId, (.identity.decoyPersonas[]?)] | map(select(. != null and . != ""))' "$INV")
+  ALLOWLIST_IDS=$(jq -c '(.allowlist.breakGlassObjectIds // []) + (.allowlist.agentObjectIds // []) | map(select(. != null and . != ""))' "$INV")
+fi
+info "Guard from inventory: $(echo "$DECOY_IDS" | jq 'length') decoy id(s), $(echo "$ALLOWLIST_IDS" | jq 'length') allowlisted id(s)"
+if [ "$DRY_RUN" = "false" ] && [ "$(echo "$DECOY_IDS" | jq 'length')" -eq 0 ]; then
+  die "refusing to enforce (dryRun=false) with an EMPTY decoyObjectIds list — the guard would disable nothing or, worse, be misconfigured. Run tests/sync_inventory.sh first."
+fi
+
 # Prerequisite: Microsoft Sentinel (the first-party "Azure Security Insights" app) must hold
 # the "Microsoft Sentinel Automation Contributor" role on the resource group that contains
 # the playbooks, or creating the automation rules fails with "Missing required permissions
@@ -47,6 +63,7 @@ az deployment group create \
   --template-file "$REPO_ROOT/bicep/response.bicep" \
   --parameters env="$ENVN" location="$REGION" regionCode="$REGION_CODE" marker="$MARKER" \
                workspaceName="$WORKSPACE" honeypotResourceGroupId="$SPOKE_RG_ID" dryRun="$DRY_RUN" \
+               decoyObjectIds="$DECOY_IDS" allowlistObjectIds="$ALLOWLIST_IDS" \
   -o none
 ok "response deployed (dryRun=$DRY_RUN)"
 

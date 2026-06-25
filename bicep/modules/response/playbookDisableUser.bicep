@@ -9,7 +9,10 @@ param location string
 @description('Resource ID of the azuresentinel API connection.')
 param sentinelConnectionId string
 
-@description('Object IDs that must NEVER be disabled (real break-glass GA, the activity agent).')
+@description('SAFETY KEY 1 — the decoy identities this playbook is ALLOWED to disable (lure, personas, canary identities, from inventory.identity). An account is actioned ONLY if it is in this list. Anything not here (a real admin who fat-fingered into the trap, an attacker-controlled real account) is never disabled.')
+param decoyObjectIds array = []
+
+@description('SAFETY KEY 2 — object IDs that must NEVER be disabled even if somehow present in the decoy list (real break-glass GA, the activity agent).')
 param allowlistObjectIds array = []
 
 @description('Dry-run: when true the playbook only comments and makes no change. Recommended for the initial soak period.')
@@ -45,6 +48,9 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
       allowlistObjectIds: {
         value: allowlistObjectIds
       }
+      decoyObjectIds: {
+        value: decoyObjectIds
+      }
       dryRun: {
         value: dryRun
       }
@@ -57,6 +63,10 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
           type: 'Object'
         }
         allowlistObjectIds: {
+          type: 'Array'
+          defaultValue: []
+        }
+        decoyObjectIds: {
           type: 'Array'
           defaultValue: []
         }
@@ -99,78 +109,113 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                 ]
               }
               actions: {
-                Guard_allowlist_and_dryrun: {
+                Guard_is_decoy: {
                   type: 'If'
                   expression: {
                     and: [
                       {
-                        not: {
-                          contains: [
-                            '@parameters(\'allowlistObjectIds\')'
-                            '@items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']'
-                          ]
-                        }
-                      }
-                      {
-                        equals: [
-                          '@parameters(\'dryRun\')'
-                          false
+                        contains: [
+                          '@parameters(\'decoyObjectIds\')'
+                          '@items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']'
                         ]
                       }
                     ]
                   }
                   actions: {
-                    Disable_user: {
-                      type: 'Http'
-                      inputs: {
-                        method: 'PATCH'
-                        uri: 'https://graph.microsoft.com/v1.0/users/@{items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']}'
-                        body: {
-                          accountEnabled: false
-                        }
-                        authentication: {
-                          type: 'ManagedServiceIdentity'
-                          audience: 'https://graph.microsoft.com'
-                        }
+                    Guard_allowlist_and_dryrun: {
+                      type: 'If'
+                      expression: {
+                        and: [
+                          {
+                            not: {
+                              contains: [
+                                '@parameters(\'allowlistObjectIds\')'
+                                '@items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']'
+                              ]
+                            }
+                          }
+                          {
+                            equals: [
+                              '@parameters(\'dryRun\')'
+                              false
+                            ]
+                          }
+                        ]
                       }
-                    }
-                    Revoke_sessions: {
-                      type: 'Http'
-                      runAfter: {
-                        Disable_user: ['Succeeded']
-                      }
-                      inputs: {
-                        method: 'POST'
-                        uri: 'https://graph.microsoft.com/v1.0/users/@{items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']}/revokeSignInSessions'
-                        authentication: {
-                          type: 'ManagedServiceIdentity'
-                          audience: 'https://graph.microsoft.com'
-                        }
-                      }
-                    }
-                    Comment_remediated: {
-                      type: 'ApiConnection'
-                      runAfter: {
-                        Revoke_sessions: ['Succeeded']
-                      }
-                      inputs: {
-                        host: {
-                          connection: {
-                            name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
+                      actions: {
+                        Disable_user: {
+                          type: 'Http'
+                          inputs: {
+                            method: 'PATCH'
+                            uri: 'https://graph.microsoft.com/v1.0/users/@{items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']}'
+                            body: {
+                              accountEnabled: false
+                            }
+                            authentication: {
+                              type: 'ManagedServiceIdentity'
+                              audience: 'https://graph.microsoft.com'
+                            }
                           }
                         }
-                        method: 'post'
-                        path: '/Incidents/Comment'
-                        body: {
-                          incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                          message: 'Honeypot SOAR: disabled @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} and revoked sessions.'
+                        Revoke_sessions: {
+                          type: 'Http'
+                          runAfter: {
+                            Disable_user: ['Succeeded']
+                          }
+                          inputs: {
+                            method: 'POST'
+                            uri: 'https://graph.microsoft.com/v1.0/users/@{items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']}/revokeSignInSessions'
+                            authentication: {
+                              type: 'ManagedServiceIdentity'
+                              audience: 'https://graph.microsoft.com'
+                            }
+                          }
+                        }
+                        Comment_remediated: {
+                          type: 'ApiConnection'
+                          runAfter: {
+                            Revoke_sessions: ['Succeeded']
+                          }
+                          inputs: {
+                            host: {
+                              connection: {
+                                name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
+                              }
+                            }
+                            method: 'post'
+                            path: '/Incidents/Comment'
+                            body: {
+                              incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
+                              message: 'Honeypot SOAR: disabled DECOY @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} and revoked sessions.'
+                            }
+                          }
+                        }
+                      }
+                      else: {
+                        actions: {
+                          Comment_decoy_skipped: {
+                            type: 'ApiConnection'
+                            inputs: {
+                              host: {
+                                connection: {
+                                  name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
+                                }
+                              }
+                              method: 'post'
+                              path: '/Incidents/Comment'
+                              body: {
+                                incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
+                                message: 'Honeypot SOAR: @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} is a decoy but was NOT disabled (allowlisted break-glass/agent, or dry-run mode).'
+                              }
+                            }
+                          }
                         }
                       }
                     }
                   }
                   else: {
                     actions: {
-                      Comment_skipped: {
+                      Comment_not_a_decoy: {
                         type: 'ApiConnection'
                         inputs: {
                           host: {
@@ -182,7 +227,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                           path: '/Incidents/Comment'
                           body: {
                             incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                            message: 'Honeypot SOAR: NO action on @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} (allowlisted or dry-run mode).'
+                            message: 'Honeypot SOAR: NO action on @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} — NOT a decoy identity. Real accounts are never disabled by this playbook.'
                           }
                         }
                       }
