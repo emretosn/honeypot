@@ -4,7 +4,7 @@
 # anything — so it is safe to deploy before you trust the pipeline. Run from your
 # workstation. Idempotent.
 #
-# After deploy you must (one-time, see docs/response.md): grant the playbook managed
+# After deploy you must (one-time, see docs/detection-and-response.md): grant the playbook managed
 # identities their Graph / lock permissions and authorize the azuresentinel connection.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -70,7 +70,7 @@ az deployment group create \
 ok "response deployed (dryRun=$DRY_RUN)"
 
 echo
-echo "  IMPORTANT one-time grants (see docs/response.md), then re-test:"
+echo "  IMPORTANT one-time grants (see docs/detection-and-response.md), then re-test:"
 echo "   - disable-user playbook MI  -> Microsoft Graph User.ReadWrite.All"
 echo "   - isolate-resource playbook MI -> role with Microsoft.Authorization/locks/write on the spoke RG"
 echo "   - authorize the azuresentinel API connection in the portal"

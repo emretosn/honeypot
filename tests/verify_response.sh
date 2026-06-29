@@ -55,7 +55,7 @@ echo "$AR" | jq -e '.value[] | select(.properties.triggeringLogic.conditions[]?.
   || echo "NOTE: could not confirm 'Honeypot:' title scoping (check manually)"
 
 echo
-echo "REMINDER: grant the playbook managed identities their permissions (see docs/response.md):"
+echo "REMINDER: grant the playbook managed identities their permissions (see docs/detection-and-response.md):"
 echo "  - disable-user MI: Microsoft Graph User.ReadWrite.All (+ User.EnableDisableAccount)"
 echo "  - isolate-resource MI: a role with Microsoft.Authorization/locks/write on the honeypot RG"
 echo "  - the Sentinel automation needs Microsoft Sentinel Playbook Operator on this RG"

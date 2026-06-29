@@ -59,7 +59,14 @@ az deployment sub create \
 SPOKE_RG=$(az deployment sub show --name network --query "properties.outputs.honeypotResourceGroupName.value" -o tsv 2>/dev/null || echo "")
 ok "network deployed${SPOKE_RG:+ (spoke RG=$SPOKE_RG)}"
 
+# Auto-fill the inventory network section (KV/storage/RG IDs) from the deployment outputs, so the
+# single source of truth is current before detection/response consume it.
+info "Syncing decoy inventory from network outputs"
+"$REPO_ROOT/tests/sync_inventory.sh" || die "inventory sync failed — run tests/sync_inventory.sh manually."
+ok "inventory synced"
+
 echo
 ok "Next:"
+echo "  - Grant the decoy SP its decoy-RG RBAC: re-run ./deploy/02_identity.sh (it picks up the new IDs)."
 echo "  - Verify:  ./tests/verify_network.sh ${SPOKE_RG:-rg-core-prod-weu}"
 echo "  - Enable the decoy KV/storage detection rules: ENABLE_RESOURCE_RULES=true ./deploy/03_detection.sh"

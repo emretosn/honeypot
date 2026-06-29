@@ -45,4 +45,4 @@ echo
 ok "Identity deployed. Next:"
 echo "  - Fill inventory/decoy-inventory.json allowlist.breakGlassObjectIds (your break-glass GA)."
 echo "  - Verify:        ./tests/verify_identity.sh"
-echo "  - Attacker path: see docs/identity.md (enumerate, reset password, sign in as the lure)."
+echo "  - Attacker path: see docs/operations.md (attack scenarios)."
