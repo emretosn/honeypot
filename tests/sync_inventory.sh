@@ -8,6 +8,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TF_DIR="$ROOT/terraform/identity"
 INV="$ROOT/inventory/decoy-inventory.json"
+TEMPLATE="$ROOT/inventory/decoy-inventory.template.json"
+
+# The live inventory is gitignored (it holds tenant-specific IDs). Seed it from the tracked
+# blank template on first run / fresh clone.
+[ -f "$INV" ] || { [ -f "$TEMPLATE" ] && cp "$TEMPLATE" "$INV"; }
 
 cd "$TF_DIR"
 TF_JSON=$(terraform output -json)

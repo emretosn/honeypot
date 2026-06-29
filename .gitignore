@@ -34,3 +34,6 @@ deploy/config.env
 # Terraform plan output (binary, regenerated)
 tfplan
 *.tfplan
+
+# Live inventory holds tenant-specific IDs — tracked as a blank template instead
+inventory/decoy-inventory.json

@@ -13,6 +13,8 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INV="$ROOT/inventory/decoy-inventory.json"
+# Live inventory is gitignored; fall back to the tracked template for static checks on a fresh clone.
+[ -f "$INV" ] || INV="$ROOT/inventory/decoy-inventory.template.json"
 EXPECTED_SCHEMA=1
 STRICT=0
 [ "${1:-}" = "--strict" ] && STRICT=1
