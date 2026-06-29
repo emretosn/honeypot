@@ -23,8 +23,10 @@ ENABLE_REACHABLE_EDGE_RULES="false"
 # only); the non-interactive rule covers the lure, the highest-value decoy identity.
 DECOY_UPNS_JSON=$(jq -c '[.identity.lure.upn] | map(select(. != null and . != ""))' "$INV" 2>/dev/null)
 DECOY_GROUP_ID=$(jq -r '.identity.decoyGroupIds[0] // ""' "$INV")
-ENABLE_COVERAGE_RULES="false"
-[ "$DECOY_UPNS_JSON" != "[]" ] && [ -n "$DECOY_UPNS_JSON" ] && ENABLE_COVERAGE_RULES="true"
+# Coverage rules depend on NonInteractiveUserSignInLogs (and the breadth rule on
+# MicrosoftGraphActivityLogs), which exist only AFTER those logs first ingest. Default OFF;
+# enable once the tables have data:  ENABLE_COVERAGE_RULES=true ./deploy/03_detection.sh
+ENABLE_COVERAGE_RULES="${ENABLE_COVERAGE_RULES:-false}"
 
 WS_ID="/subscriptions/$CURRENT_SUB/resourceGroups/$MGMT_RG/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE"
 
