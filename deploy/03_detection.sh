@@ -18,6 +18,14 @@ REACHABLE_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
 ENABLE_REACHABLE_EDGE_RULES="false"
 [ -n "$REACHABLE_APP_ID" ] && [ -n "$REACHABLE_SP_ID" ] && ENABLE_REACHABLE_EDGE_RULES="true"
 
+# Expanded coverage (Phase 06): decoy UPNs + the decoy group, from the inventory. Coverage rules
+# are deterministic/inventory-scoped. The inventory stores the lure UPN (personas are object-id
+# only); the non-interactive rule covers the lure, the highest-value decoy identity.
+DECOY_UPNS_JSON=$(jq -c '[.identity.lure.upn] | map(select(. != null and . != ""))' "$INV" 2>/dev/null)
+DECOY_GROUP_ID=$(jq -r '.identity.decoyGroupIds[0] // ""' "$INV")
+ENABLE_COVERAGE_RULES="false"
+[ "$DECOY_UPNS_JSON" != "[]" ] && [ -n "$DECOY_UPNS_JSON" ] && ENABLE_COVERAGE_RULES="true"
+
 WS_ID="/subscriptions/$CURRENT_SUB/resourceGroups/$MGMT_RG/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE"
 
 # Optional: decoy resource names (only meaningful once the network module is deployed). Derived
@@ -36,6 +44,7 @@ BODY=$(jq -n --arg ws "$WS_ID" '{
     logs: [
       { category: "AuditLogs",  enabled: true },
       { category: "SignInLogs", enabled: true },
+      { category: "NonInteractiveUserSignInLogs", enabled: true },
       { category: "ServicePrincipalSignInLogs", enabled: true }
     ]
   }
@@ -61,8 +70,11 @@ az deployment group create \
                enableResourceRules="$ENABLE_RESOURCE_RULES" \
                reachableAppId="$REACHABLE_APP_ID" reachableSpObjectId="$REACHABLE_SP_ID" \
                enableReachableEdgeRules="$ENABLE_REACHABLE_EDGE_RULES" \
+               decoyUpns="$DECOY_UPNS_JSON" decoyGroupId="$DECOY_GROUP_ID" \
+               enableCoverageRules="$ENABLE_COVERAGE_RULES" \
+               enableEnumerationRule="${ENABLE_ENUMERATION_RULE:-false}" \
   -o none
-ok "detection deployed (resource rules: $ENABLE_RESOURCE_RULES, reachable-edge rules: $ENABLE_REACHABLE_EDGE_RULES)"
+ok "detection deployed (resource: $ENABLE_RESOURCE_RULES, reachable-edge: $ENABLE_REACHABLE_EDGE_RULES, coverage: $ENABLE_COVERAGE_RULES)"
 
 echo
 ok "Detection is live. Verify (paths per Microsoft docs):"

@@ -13,6 +13,10 @@ param workspaceName = 'log-hp-dev-weu'
 // inventory at deploy time; the value here is only for static validation.
 param decoyObjectIds = []
 
+// Decoy SERVICE PRINCIPAL object IDs (the reachable decoy SP). Disabled via /servicePrincipals.
+// Injected by deploy/04_response.sh from inventory.identity.reachableApp.spObjectId.
+param decoySpObjectIds = []
+
 // CRITICAL SAFETY: object IDs that must never be disabled (real break-glass GA, the agent).
 // Injected by deploy/04_response.sh from inventory.allowlist.breakGlassObjectIds.
 param allowlistObjectIds = []

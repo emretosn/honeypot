@@ -34,6 +34,8 @@ echo "$DEF" | grep -q 'decoyObjectIds'   && pass "disable-user keys on decoyObje
 echo "$DEF" | grep -q 'allowlistObjectIds' && pass "disable-user honors the allowlist (break-glass/agent backstop)" || fail "allowlist guard missing from disable-user playbook!"
 echo "$DEF" | grep -q 'Comment_not_a_decoy' && pass "disable-user has the fail-loud 'not a decoy' branch (no silent skips)" || fail "fail-loud 'not a decoy' branch missing"
 echo "$DEF" | grep -q 'revokeSignInSessions' && pass "disable-user playbook revokes sessions" || fail "revokeSignInSessions missing"
+echo "$DEF" | grep -q 'decoySpObjectIds' && pass "disable-user can disable decoy service principals (/servicePrincipals)" || fail "decoySpObjectIds / SP-disable wiring missing"
+echo "$DEF" | grep -q 'servicePrincipals' && pass "disable endpoint covers servicePrincipals" || fail "servicePrincipals endpoint missing from disable action"
 
 # 2b. Confirm decoyObjectIds is actually populated (else the guard would never act).
 DECOY_N=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$MGMT_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq '(.properties.parameters.decoyObjectIds.value // []) | length')

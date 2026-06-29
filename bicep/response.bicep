@@ -22,6 +22,9 @@ param workspaceName string
 @description('Decoy identity object IDs the disable-user playbook is allowed to act on (lure + personas + canary identities, from inventory.identity). The playbook disables an account ONLY if it is in this list — this is the primary guard that makes remediation incapable of touching a real account.')
 param decoyObjectIds array = []
 
+@description('Decoy SERVICE PRINCIPAL object IDs the disable-user playbook may disable (the reachable decoy SP). Disabling these uses the /servicePrincipals Graph endpoint.')
+param decoySpObjectIds array = []
+
 @description('Object IDs that must NEVER be disabled (real break-glass GA, the activity agent).')
 param allowlistObjectIds array = []
 
@@ -57,6 +60,7 @@ module disableUser 'modules/response/playbookDisableUser.bicep' = {
     tags: tags
     sentinelConnectionId: sentinelConnection.outputs.id
     decoyObjectIds: decoyObjectIds
+    decoySpObjectIds: decoySpObjectIds
     allowlistObjectIds: allowlistObjectIds
     dryRun: dryRun
   }

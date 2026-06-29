@@ -19,5 +19,11 @@ param reachableAppId = ''
 param reachableSpObjectId = ''
 param enableReachableEdgeRules = false
 
-// Enumeration rule is best-effort and noisier; off by default.
+// Expanded coverage (Phase 06) — decoy UPNs + group from the inventory. Injected at deploy time.
+param decoyUpns = []
+param decoyGroupId = ''
+param enableCoverageRules = false
+param enumerationBreadthThreshold = 200
+
+// Enumeration breadth-anomaly rule is best-effort/behavioural; off by default.
 param enableEnumerationRule = false

@@ -24,12 +24,14 @@ DRY_RUN="${DRY_RUN:-true}"
 # The playbook disables an account only if it is in decoyObjectIds AND not in the allowlist.
 INV="$REPO_ROOT/inventory/decoy-inventory.json"
 DECOY_IDS='[]'
+DECOY_SP_IDS='[]'
 ALLOWLIST_IDS='[]'
 if [ -f "$INV" ]; then
   DECOY_IDS=$(jq -c '[.identity.lure.objectId, (.identity.decoyPersonas[]?)] | map(select(. != null and . != ""))' "$INV")
+  DECOY_SP_IDS=$(jq -c '[.identity.reachableApp.spObjectId] | map(select(. != null and . != ""))' "$INV")
   ALLOWLIST_IDS=$(jq -c '(.allowlist.breakGlassObjectIds // []) + (.allowlist.agentObjectIds // []) | map(select(. != null and . != ""))' "$INV")
 fi
-info "Guard from inventory: $(echo "$DECOY_IDS" | jq 'length') decoy id(s), $(echo "$ALLOWLIST_IDS" | jq 'length') allowlisted id(s)"
+info "Guard from inventory: $(echo "$DECOY_IDS" | jq 'length') decoy user(s), $(echo "$DECOY_SP_IDS" | jq 'length') decoy SP(s), $(echo "$ALLOWLIST_IDS" | jq 'length') allowlisted id(s)"
 if [ "$DRY_RUN" = "false" ] && [ "$(echo "$DECOY_IDS" | jq 'length')" -eq 0 ]; then
   die "refusing to enforce (dryRun=false) with an EMPTY decoyObjectIds list — the guard would disable nothing or, worse, be misconfigured. Run tests/sync_inventory.sh first."
 fi
@@ -63,7 +65,7 @@ az deployment group create \
   --template-file "$REPO_ROOT/bicep/response.bicep" \
   --parameters env="$ENVN" location="$REGION" regionCode="$REGION_CODE" marker="$MARKER" \
                workspaceName="$WORKSPACE" honeypotResourceGroupId="$SPOKE_RG_ID" dryRun="$DRY_RUN" \
-               decoyObjectIds="$DECOY_IDS" allowlistObjectIds="$ALLOWLIST_IDS" \
+               decoyObjectIds="$DECOY_IDS" decoySpObjectIds="$DECOY_SP_IDS" allowlistObjectIds="$ALLOWLIST_IDS" \
   -o none
 ok "response deployed (dryRun=$DRY_RUN)"
 

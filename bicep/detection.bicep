@@ -17,6 +17,15 @@ param decoyStorageAccountName string
 @description('IP addresses allowlisted from sign-in detection (e.g. the activity agent). Empty = none.')
 param signInAllowlistIps array = []
 
+@description('All decoy identity UPNs (lure + personas, from inventory). Used by the non-interactive sign-in rule.')
+param decoyUpns array = []
+
+@description('Object ID of the decoy security group the lure owns (from inventory.identity.decoyGroupIds[0]). Empty disables the group-change rule.')
+param decoyGroupId string = ''
+
+@description('Threshold for the directory-enumeration breadth anomaly: alert when a single non-allowlisted caller reads more than this many distinct directory objects in the window. Tune during soak.')
+param enumerationBreadthThreshold int = 200
+
 @description('App (client) ID of the reachable decoy app the foothold can take over (from inventory.identity.reachableApp.appId). Empty disables the credential-add rule.')
 param reachableAppId string = ''
 
@@ -25,6 +34,9 @@ param reachableSpObjectId string = ''
 
 @description('Enable the best-effort enumeration-anomaly rule (noisier, P-licensed sources).')
 param enableEnumerationRule bool = false
+
+@description('Enable the expanded coverage rules (non-interactive sign-in, consent/app-role grant, group member/owner change). Inventory-scoped and deterministic.')
+param enableCoverageRules bool = false
 
 @description('Enable the reachable-edge invited-action rules (credential-add on the decoy app + sign-in as the decoy SP). Turn on once the reachable app/SP exist in the inventory.')
 param enableReachableEdgeRules bool = false
@@ -42,6 +54,7 @@ module sentinel 'modules/detection/sentinelOnboarding.bicep' = {
 // Bicep multi-line strings do NOT interpolate, so each KQL query is assembled from
 // interpolated single-quoted lines joined with newlines.
 var allowlistLiteral = empty(signInAllowlistIps) ? '""' : '"${join(signInAllowlistIps, '","')}"'
+var decoyUpnLiteral = empty(decoyUpns) ? '""' : '"${join(decoyUpns, '","')}"'
 
 var qPasswordReset = join([
   'AuditLogs'
@@ -82,23 +95,20 @@ var qKvSecretRead = join([
   'AzureDiagnostics'
   '| where ResourceProvider == "MICROSOFT.KEYVAULT"'
   '| where Resource =~ "${decoyKeyVaultName}"'
-  '| where OperationName in ("SecretGet", "SecretList", "VaultGet")'
-  '| extend ActorIp = columnifexists("CallerIPAddress", ""), Actor = columnifexists("identity_claim_upn_s", "")'
-  '| project TimeGenerated, OperationName, Resource, Actor, ActorIp'
+  // Secret-plane reads only — the honeytokens. VaultGet/control-plane ops are platform/CLI noise.
+  '| where OperationName in ("SecretGet", "SecretList")'
+  '| extend ActorIp = columnifexists("CallerIPAddress", ""), Actor = columnifexists("identity_claim_upn_s", ""), ActorApp = columnifexists("identity_claim_appid_g", "")'
+  '| project TimeGenerated, OperationName, Resource, Actor, ActorApp, ActorIp'
 ], '\n')
 
 var qResourceAccess = join([
   'StorageBlobLogs'
   '| where AccountName =~ "${decoyStorageAccountName}"'
+  // Only attacker-style data access (a stolen SAS token or account key). TrustedAccess = the
+  // Azure platform/Defender scanning the account; not an attacker, so excluded.
+  '| where AuthenticationType in ("SAS", "AccountKey")'
   '| extend ActorIp = columnifexists("CallerIpAddress", "")'
   '| project TimeGenerated, AccountName, OperationName, Uri, ActorIp, AuthenticationType'
-], '\n')
-
-var qEnumeration = join([
-  'MicrosoftGraphActivityLogs'
-  '| where RequestUri has "${lureUpn}"'
-  '| extend ActorAppId = AppId'
-  '| project TimeGenerated, RequestMethod, RequestUri, ResponseStatusCode, ActorAppId, IPAddress'
 ], '\n')
 
 // Reachable-edge invited actions (Phase 04). The decoy app/SP filters come from the inventory.
@@ -120,6 +130,61 @@ var qSpSignIn = join([
   '| extend SpName = tostring(coalesce(ServicePrincipalName, "decoy-sp"))'
   '| extend ActorIp = tostring(coalesce(IPAddress, ""))'
   '| project TimeGenerated, SpName, ServicePrincipalId, ActorIp, ResultType, AppId'
+], '\n')
+
+// --- Expanded coverage (Phase 06) — modern kill-chain telemetry, inventory-scoped/deterministic.
+
+// Token-based (non-interactive) sign-in AS a decoy identity — catches token replay / AiTM that
+// the interactive SigninLogs rule misses.
+var qNonInteractive = join([
+  'NonInteractiveUserSignInLogs'
+  '| where UserPrincipalName in~ (${decoyUpnLiteral})'
+  '| where IPAddress !in (${allowlistLiteral})'
+  '| extend LureId = tostring(coalesce(UserId, ""))'
+  '| extend LureUpn = tostring(coalesce(UserPrincipalName, "unknown"))'
+  '| extend ActorIp = tostring(coalesce(IPAddress, ""))'
+  '| project TimeGenerated, LureUpn, LureId, ActorIp, AppDisplayName, ResultType'
+], '\n')
+
+// Consent / app-role grant involving the decoy app/SP — the tripwire for the unconsented
+// "god-mode" permission the reachable app requests (an attacker trying to make it real).
+var qConsentGrant = join([
+  'AuditLogs'
+  '| where OperationName has_any ("Consent to application", "Add app role assignment grant to service principal", "Add delegated permission grant", "Add OAuth2PermissionGrant")'
+  '| mv-expand TargetResources'
+  '| extend targetId = tostring(TargetResources.id), targetName = tostring(TargetResources.displayName)'
+  '| where targetId == "${reachableAppId}" or targetId == "${reachableSpObjectId}" or targetName has "${reachableAppId}"'
+  '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
+  '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
+  '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
+  '| project TimeGenerated, OperationName, targetId, Actor, ActorId, ActorIp'
+], '\n')
+
+// Member/owner added to the decoy group the lure owns — a believable escalation primitive.
+var qGroupChange = join([
+  'AuditLogs'
+  '| where OperationName has_any ("Add member to group", "Add owner to group")'
+  '| mv-expand TargetResources'
+  '| extend targetId = tostring(TargetResources.id)'
+  '| where targetId == "${decoyGroupId}"'
+  '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
+  '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
+  '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
+  '| project TimeGenerated, OperationName, targetId, Actor, ActorId, ActorIp'
+], '\n')
+
+// Behavioural: directory-enumeration BREADTH anomaly — a single non-allowlisted caller reading
+// many distinct directory objects (what AzureHound/ROADrecon actually do). Corroboration only,
+// never a sole basis for auto-remediation.
+var qEnumerationBreadth = join([
+  'MicrosoftGraphActivityLogs'
+  '| where RequestMethod == "GET"'
+  '| where RequestUri has_any ("/users", "/servicePrincipals", "/applications", "/groups", "/directoryRoles", "/roleManagement")'
+  '| where IPAddress !in (${allowlistLiteral})'
+  '| summarize DistinctObjects = dcount(RequestUri), SampleUris = make_set(RequestUri, 5) by AppId, IPAddress, bin(TimeGenerated, 1h)'
+  '| where DistinctObjects > ${enumerationBreadthThreshold}'
+  '| extend ActorAppId = AppId'
+  '| project TimeGenerated, ActorAppId, IPAddress, DistinctObjects'
 ], '\n')
 
 // 1. Password reset / change targeting the lure — strong tripwire.
@@ -257,29 +322,6 @@ module ruleResourceAccess 'modules/detection/scheduledRule.bicep' = if (enableRe
   }
 }
 
-// 6. OPTIONAL best-effort enumeration anomaly — noisier, depends on P-licensed sources.
-module ruleEnumeration 'modules/detection/scheduledRule.bicep' = if (enableEnumerationRule) {
-  name: 'rule-decoy-enumeration'
-  dependsOn: [sentinel]
-  params: {
-    workspaceName: workspaceName
-    ruleId: guid(workspaceName, 'decoy-enumeration')
-    displayName: 'Honeypot: directory enumeration touching decoy objects (best-effort)'
-    ruleDescription: 'Best-effort: reads that reference the lure. Read detection is inherently lower fidelity than write/auth events; tune before enforcing.'
-    severity: 'Low'
-    tactics: ['Discovery']
-    queryFrequency: 'PT1H'
-    queryPeriod: 'PT1H'
-    query: qEnumeration
-    entityMappings: [
-      {
-        entityType: 'IP'
-        fieldMappings: [{ identifier: 'Address', columnName: 'IPAddress' }]
-      }
-    ]
-  }
-}
-
 // 7. Reachable edge: a credential was added to the decoy app the foothold owns — the invited
 //    takeover action. Near-100% TP.
 module ruleCredentialAdd 'modules/detection/scheduledRule.bicep' = if (enableReachableEdgeRules) {
@@ -329,6 +371,115 @@ module ruleSpSignIn 'modules/detection/scheduledRule.bicep' = if (enableReachabl
       {
         entityType: 'IP'
         fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
+      }
+    ]
+  }
+}
+
+// 9. Coverage: non-interactive (token-based) sign-in as a decoy identity — token replay / AiTM.
+module ruleNonInteractive 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(decoyUpns)) {
+  name: 'rule-decoy-noninteractive-signin'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'decoy-noninteractive-signin')
+    displayName: 'Honeypot: non-interactive sign-in as a decoy identity'
+    ruleDescription: 'A token-based (non-interactive) sign-in occurred as a decoy identity from a non-allowlisted IP. Catches token replay / AiTM that interactive sign-in logs miss. No legitimate non-interactive use of these accounts exists.'
+    severity: 'High'
+    tactics: ['DefenseEvasion', 'CredentialAccess']
+    query: qNonInteractive
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'LureUpn' }
+          { identifier: 'AadUserId', columnName: 'LureId' }
+        ]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
+      }
+    ]
+  }
+}
+
+// 10. Coverage: consent / app-role grant involving the decoy app/SP — the tripwire for the
+//     unconsented god-mode permission the reachable app requests.
+module ruleConsentGrant 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(reachableSpObjectId)) {
+  name: 'rule-decoy-consent-grant'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'decoy-consent-grant')
+    displayName: 'Honeypot: consent or app-role grant on decoy app/service principal'
+    ruleDescription: 'A consent or app-role/permission grant targeted the decoy reachable app/SP. This is an attacker trying to turn the app\'s unconsented permission request into real privilege.'
+    severity: 'High'
+    tactics: ['PrivilegeEscalation', 'Persistence']
+    query: qConsentGrant
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'Actor' }
+          { identifier: 'AadUserId', columnName: 'ActorId' }
+        ]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
+      }
+    ]
+  }
+}
+
+// 11. Coverage: member/owner added to the decoy group the lure owns.
+module ruleGroupChange 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(decoyGroupId)) {
+  name: 'rule-decoy-group-change'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'decoy-group-change')
+    displayName: 'Honeypot: member or owner added to decoy group'
+    ruleDescription: 'A member or owner was added to the decoy security group the lure owns. No legitimate process modifies this group.'
+    severity: 'High'
+    tactics: ['PrivilegeEscalation', 'Persistence']
+    query: qGroupChange
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          { identifier: 'FullName', columnName: 'Actor' }
+          { identifier: 'AadUserId', columnName: 'ActorId' }
+        ]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
+      }
+    ]
+  }
+}
+
+// 12. Behavioural: directory-enumeration BREADTH anomaly (replaces the lure-UPN string match).
+//     Low severity — corroboration only, never a sole basis for auto-remediation.
+module ruleEnumerationBreadth 'modules/detection/scheduledRule.bicep' = if (enableEnumerationRule) {
+  name: 'rule-decoy-enumeration-breadth'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'decoy-enumeration-breadth')
+    displayName: 'Honeypot: directory enumeration breadth anomaly (best-effort)'
+    ruleDescription: 'A single non-allowlisted caller read an unusually high number of distinct directory objects in one hour — the pattern of bulk recon tools (AzureHound/ROADrecon). Behavioural/best-effort: corroboration only, never a sole basis for remediation. Tune enumerationBreadthThreshold during soak.'
+    severity: 'Low'
+    tactics: ['Discovery']
+    queryFrequency: 'PT1H'
+    queryPeriod: 'PT1H'
+    query: qEnumerationBreadth
+    entityMappings: [
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'IPAddress' }]
       }
     ]
   }
