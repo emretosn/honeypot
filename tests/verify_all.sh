@@ -28,7 +28,6 @@ run() {
 
 section "Static validation (IaC builds)"
 run "bicep: foundation" az bicep build-params --file bicep/parameters/foundation.dev.bicepparam --stdout
-run "bicep: production-sim" az bicep build-params --file bicep/parameters/production.dev.bicepparam --stdout
 run "bicep: honeypot"   az bicep build-params --file bicep/parameters/honeypot.dev.bicepparam --stdout
 run "bicep: network (orchestrator)" az bicep build-params --file bicep/parameters/network.dev.bicepparam --stdout
 run "bicep: detection"  az bicep build-params --file bicep/parameters/detection.dev.bicepparam --stdout

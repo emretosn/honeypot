@@ -3,8 +3,7 @@
 # lure password), so protect the machine accordingly.
 #
 # A remote azurerm backend (private-network storage account) is introduced in the CI/CD
-# stage, where shared state and locking actually matter. The hardened backend account is
-# defined in bootstrap/ for that stage. To migrate later:
+# stage, where shared state and locking actually matter. To migrate later:
 #   1. add a `terraform { backend "azurerm" {} }` block here,
 #   2. run `terraform init -migrate-state -backend-config=backend.hcl`.
 #

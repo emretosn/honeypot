@@ -30,7 +30,7 @@ decoy_personas = [
 
 # Escalation bait.
 decoy_group_name = "Identity Administrators"
-decoy_app_names  = ["Privileged Identity Sync", "Directory Connector"]
+decoy_app_names  = ["Directory Connector"]
 
 # PIM eligibility instead of active role (requires Entra ID P2). Default false.
 enable_pim = false

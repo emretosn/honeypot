@@ -11,7 +11,3 @@ func mgmtResourceGroup(marker string, env string, regionCode string) string => '
 @description('Log Analytics workspace.')
 @export()
 func logAnalyticsWorkspace(marker string, env string, regionCode string) string => 'log-${base(marker, env, regionCode)}'
-
-@description('Automation account (SOAR / playbooks).')
-@export()
-func automationAccount(marker string, env string, regionCode string) string => 'aa-${base(marker, env, regionCode)}'

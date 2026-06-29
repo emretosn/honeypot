@@ -77,7 +77,7 @@ variable "decoy_group_name" {
 
 variable "decoy_app_names" {
   type        = list(string)
-  default     = ["Privileged Identity Sync", "Directory Connector"]
+  default     = ["Directory Connector"]
   description = "Powerful-sounding owned apps with NO real grants. Each is a tripwire."
 }
 
@@ -90,7 +90,7 @@ variable "enable_pim" {
 variable "foothold_principal_object_id" {
   type        = string
   default     = ""
-  description = "OPTIONAL object ID of a likely attacker foothold principal. If set, it is made owner of a decoy app, seeding an explicit foothold->lure escalation edge for demos."
+  description = "Object ID of the attacker foothold principal. If set, it is made owner of the reachable decoy app (reachable_edge.tf) so it can add a credential and take over the decoy SP — the genuine, contained escalation path."
 }
 
 # --- Conditional Access ---

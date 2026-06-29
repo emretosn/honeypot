@@ -18,20 +18,12 @@ resource "azuread_group_member" "lure" {
 
 # Powerful-sounding applications with NO real grants/permissions. The lure owns them, so
 # "owner can add a credential and act as the app" looks like an escalation route — but the
-# apps can do nothing. Each owned app is an AzureHound edge and a tripwire.
+# apps can do nothing. Each owned app is an AzureHound edge and a tripwire. (The genuinely
+# reachable foothold->SP path lives in reachable_edge.tf.)
 resource "azuread_application" "decoy" {
   for_each = toset(var.decoy_app_names)
 
   display_name     = each.value
   sign_in_audience = "AzureADMyOrg"
   owners           = [azuread_user.lure.object_id]
-}
-
-# OPTIONAL explicit foothold -> lure edge for demos: make the chosen foothold principal an
-# owner of the first decoy app, so AzureHound draws foothold --Owner--> app <--Owner-- lure.
-resource "azuread_application_owner" "foothold_edge" {
-  count = var.foothold_principal_object_id == "" ? 0 : 1
-
-  application_id  = azuread_application.decoy[var.decoy_app_names[0]].id
-  owner_object_id = var.foothold_principal_object_id
 }
