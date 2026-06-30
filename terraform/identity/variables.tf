@@ -118,7 +118,7 @@ variable "agent_named_location_cidrs" {
   description = "CIDRs of the (optional) activity agent. Empty = no agent yet."
 }
 
-# --- Reachable escalation edge (Phase 04). See docs/sp_path_alternatives.md. ---
+# --- Reachable escalation edge. ---
 
 variable "reachable_app_name" {
   type        = string

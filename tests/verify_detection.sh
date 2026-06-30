@@ -52,7 +52,7 @@ echo "$RULES_JSON" | jq -r '.value[] | select(.properties.displayName | test("si
   | grep -q '!in' && pass "sign-in rule contains an allowlist exclusion" \
   || echo "NOTE: sign-in rule has no allowlist exclusion (ok if no agent configured)"
 
-# 4. SCHEMA CONTRACT (the Phase 02 fail-loud check): for every Scheduled rule, run its KQL
+# 4. SCHEMA CONTRACT: for every Scheduled rule, run its KQL
 #    against the live workspace and confirm (a) it binds to the real schema and (b) every
 #    entity-mapping column the rule declares is actually PRODUCED by the query. A rule whose
 #    entity column is absent would create incidents with empty entities — detection "fires" but

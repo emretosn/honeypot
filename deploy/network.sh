@@ -9,8 +9,8 @@
 # decoyVmSshPublicKey in bicep/parameters/network.dev.bicepparam.
 #
 # Usage:
-#   deploy/05_network.sh              # what-if preview, then prompt to deploy
-#   deploy/05_network.sh --yes        # skip the prompt (still shows what-if)
+#   deploy/network.sh              # what-if preview, then prompt to deploy
+#   deploy/network.sh --yes        # skip the prompt (still shows what-if)
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 load_config
@@ -67,6 +67,6 @@ ok "inventory synced"
 
 echo
 ok "Next:"
-echo "  - Grant the decoy SP its decoy-RG RBAC: re-run ./deploy/02_identity.sh (it picks up the new IDs)."
+echo "  - Grant the decoy SP its decoy-RG RBAC:  ./deploy/edge.sh"
 echo "  - Verify:  ./tests/verify_network.sh ${SPOKE_RG:-rg-core-prod-weu}"
-echo "  - Enable the decoy KV/storage detection rules: ENABLE_RESOURCE_RULES=true ./deploy/03_detection.sh"
+echo "  - Enable the decoy KV/storage detection rules: ENABLE_RESOURCE_RULES=true ./deploy/detection.sh"

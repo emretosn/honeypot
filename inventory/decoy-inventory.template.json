@@ -14,7 +14,7 @@
     "decoyGroupIds": [],
     "decoyAppIds": [],
     "reachableApp": {
-      "$comment": "Phase 04 reachable escalation edge — the decoy app/SP the foothold can take over. Consumed by detection (credential-add + SP sign-in rules).",
+      "$comment": "Reachable escalation edge — the decoy app/SP the foothold can take over. Consumed by detection (credential-add + SP sign-in rules).",
       "appId": "",
       "appObjectId": "",
       "spObjectId": "",

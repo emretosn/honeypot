@@ -14,7 +14,7 @@ bicep/                 Resource / monitoring / SOAR plane
   detection.bicep      Sentinel + analytics rules    response.bicep    SOAR playbooks
   modules/ parameters/ reusable units + per-env params
 terraform/identity/    Entra plane (azuread+azurerm): AU, lure, role, bait, reachable SP edge, CA
-deploy/                Ordered deploy scripts (01_foundation … 05_network) + lib + config
+deploy/                Deploy scripts (foundation→identity→network→edge→detection→response, teardown) + README
 tests/                 Verification scripts + sync_inventory + attacker_test_user
 inventory/             Module contract (blank template tracked; live ignored)
 docs/                  architecture · operations · detection-and-response · design-notes

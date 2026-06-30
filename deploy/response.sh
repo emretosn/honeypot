@@ -45,7 +45,7 @@ MGMT_RG_SCOPE="/subscriptions/$CURRENT_SUB/resourceGroups/$MGMT_RG"
 
 info "Ensuring Microsoft Sentinel can run the playbooks (Automation Contributor on $MGMT_RG)"
 SENTINEL_SP_ID=$(az ad sp show --id "$SENTINEL_APP_ID" --query id -o tsv 2>/dev/null || true)
-[ -n "$SENTINEL_SP_ID" ] || die "could not resolve the Azure Security Insights service principal — ensure Microsoft Sentinel is onboarded (run deploy/03_detection.sh first)."
+[ -n "$SENTINEL_SP_ID" ] || die "could not resolve the Azure Security Insights service principal — ensure Microsoft Sentinel is onboarded (run deploy/detection.sh first)."
 
 if az role assignment list --assignee "$SENTINEL_SP_ID" --scope "$MGMT_RG_SCOPE" \
       --query "[?roleDefinitionName=='Microsoft Sentinel Automation Contributor']" -o tsv 2>/dev/null | grep -q .; then

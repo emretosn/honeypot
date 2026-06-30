@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the identity honeypot (Terraform) with LOCAL state — no remote backend, no jump VM.
+# Deploy the identity honeypot (Terraform) with LOCAL state
 # Run from your workstation, logged in as a principal with directory-admin rights (the rights
 # to create administrative units, custom roles and Conditional Access policies). State is
 # written to terraform/identity/terraform.tfstate (gitignored, sensitive). Idempotent.
@@ -13,17 +13,10 @@ require_login
 TF_DIR="$REPO_ROOT/terraform/identity"
 export TF_VAR_verified_domain="$VERIFIED_DOMAIN"
 
-# Reachable-edge RBAC payoff (Phase 04): if the network is already deployed, pass the decoy RG +
-# Key Vault ids from the inventory so the decoy SP gets Owner-on-RG + KV-Secrets-User (contained).
-# Empty on the first pass (before the network exists) — the role assignments are then skipped.
-INV="$REPO_ROOT/inventory/decoy-inventory.json"
-if [ -f "$INV" ]; then
-  RG_ID=$(jq -r '.network.honeypotResourceGroupId // ""' "$INV")
-  KV_ID=$(jq -r '.network.keyVaultId // ""' "$INV")
-  [ -n "$RG_ID" ] && export TF_VAR_decoy_resource_group_id="$RG_ID"
-  [ -n "$KV_ID" ] && export TF_VAR_decoy_key_vault_id="$KV_ID"
-  if [ -n "$RG_ID" ]; then info "Reachable-edge RBAC will target decoy RG (and KV) from inventory"; else info "Network not yet in inventory — reachable-edge RBAC skipped this pass"; fi
-fi
+# First stage of the identity plane: decoy AU, lure, personas, role, bait, and the reachable app/SP
+# (foothold-owned). The decoy SP's Azure RBAC payoff is granted later by deploy/edge.sh, once the
+# network exists. We do NOT pass the decoy RG/KV here, so that step is cleanly separated.
+unset TF_VAR_decoy_resource_group_id TF_VAR_decoy_key_vault_id
 
 info "terraform init (local backend)"
 terraform -chdir="$TF_DIR" init -input=false
@@ -45,4 +38,4 @@ echo
 ok "Identity deployed. Next:"
 echo "  - Fill inventory/decoy-inventory.json allowlist.breakGlassObjectIds (your break-glass GA)."
 echo "  - Verify:        ./tests/verify_identity.sh"
-echo "  - Attacker path: see docs/operations.md (attack scenarios)."
+echo "  - Then deploy the network (./deploy/network.sh), then ./deploy/edge.sh for the SP RBAC."

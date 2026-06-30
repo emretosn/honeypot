@@ -111,7 +111,7 @@ var qResourceAccess = join([
   '| project TimeGenerated, AccountName, OperationName, Uri, ActorIp, AuthenticationType'
 ], '\n')
 
-// Reachable-edge invited actions (Phase 04). The decoy app/SP filters come from the inventory.
+// Reachable-edge invited actions. The decoy app/SP filters come from the inventory.
 var qCredentialAdd = join([
   'AuditLogs'
   '| where OperationName has_any ("Add service principal credentials", "Update application – Certificates and secrets management", "Add password to application", "Add key to application", "Update application")'
@@ -132,7 +132,7 @@ var qSpSignIn = join([
   '| project TimeGenerated, SpName, ServicePrincipalId, ActorIp, ResultType, AppId'
 ], '\n')
 
-// --- Expanded coverage (Phase 06) — modern kill-chain telemetry, inventory-scoped/deterministic.
+// --- Expanded coverage — modern kill-chain telemetry, inventory-scoped/deterministic.
 
 // Token-based (non-interactive) sign-in AS a decoy identity — catches token replay / AiTM that
 // the interactive SigninLogs rule misses.

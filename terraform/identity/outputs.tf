@@ -61,7 +61,7 @@ output "reachable_app" {
     sp_object_id  = azuread_service_principal.reachable.object_id
     display_name  = azuread_application.reachable.display_name
   }
-  description = "Reachable decoy app/SP the foothold can take over (Phase 04). Consumed by detection (credential-add + SP sign-in rules)."
+  description = "Reachable decoy app/SP the foothold can take over. Consumed by detection (credential-add + SP sign-in rules)."
 }
 
 output "reachable_sp_rbac_scoped" {

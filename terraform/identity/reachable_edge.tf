@@ -1,8 +1,8 @@
-# Reachable escalation edge (Phase 04) — a decoy service principal the foothold can take over.
-# Design + rationale: docs/sp_path_alternatives.md. Combines:
-#   #1 unconsented Graph "god-mode" REQUEST (Entra-visible hook — looks dangerous, grants nothing)
-#   #3 real-but-contained Azure RBAC payoff (Owner of the decoy RG + KV Secrets read)
-#   takeover primitive: the foothold is a direct OWNER of the app, so it can add a credential.
+# Reachable escalation edge — a decoy service principal the foothold can take over.
+# Design + rationale: docs/design-notes.md ("Decoy SP: looks dangerous, isn't"). Combines:
+#   Unconsented Graph "god-mode" REQUEST (Entra-visible hook — looks dangerous, grants nothing)
+#   Real-but-contained Azure RBAC payoff (Owner of the decoy RG + KV Secrets read)
+#   Takeover primitive: the foothold is a direct OWNER of the app, so it can add a credential.
 # Every step (credential-add, SP sign-in, KV read, decoy-RG action) is a contained tripwire.
 
 # Microsoft Graph well-known IDs (for the unconsented permission REQUEST only — never consented).
@@ -18,7 +18,7 @@ resource "azuread_application" "reachable" {
   display_name     = var.reachable_app_name
   sign_in_audience = "AzureADMyOrg"
 
-  # #1 HOOK: request god-mode, but we deliberately create NO app_role_assignment / admin consent,
+  # HOOK: request god-mode, but we deliberately create NO app_role_assignment / admin consent,
   # so appRoleAssignments stays empty. A self-consent ATTEMPT by the attacker is a tripwire.
   required_resource_access {
     resource_app_id = local.ms_graph_app_id
@@ -36,7 +36,7 @@ resource "azuread_service_principal" "reachable" {
   client_id = azuread_application.reachable.client_id
 }
 
-# #3 PAYOFF (post-takeover, contained): the SP is Owner of the DECOY resource group. Looks like
+# PAYOFF (post-takeover, contained): the SP is Owner of the DECOY resource group. Looks like
 # subscription-grade power; scoped to a decoy RG whose egress to production is denied. Count-gated
 # so identity still deploys before the network exists (empty id = skip; set on the second pass).
 resource "azurerm_role_assignment" "sp_rg_owner" {

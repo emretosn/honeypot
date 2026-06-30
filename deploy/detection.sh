@@ -12,20 +12,20 @@ INV="$REPO_ROOT/inventory/decoy-inventory.json"
 LURE_UPN=$(jq -r '.identity.lure.upn' "$INV" 2>/dev/null)
 [ -n "$LURE_UPN" ] && [ "$LURE_UPN" != "null" ] || die "lure UPN missing in inventory — run tests/sync_inventory.sh."
 
-# Reachable-edge ids (Phase 04) — enable the invited-action rules only when they exist.
+# Reachable-edge ids — enable the invited-action rules only when they exist.
 REACHABLE_APP_ID=$(jq -r '.identity.reachableApp.appId // ""' "$INV")
 REACHABLE_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
 ENABLE_REACHABLE_EDGE_RULES="false"
 [ -n "$REACHABLE_APP_ID" ] && [ -n "$REACHABLE_SP_ID" ] && ENABLE_REACHABLE_EDGE_RULES="true"
 
-# Expanded coverage (Phase 06): decoy UPNs + the decoy group, from the inventory. Coverage rules
+# Expanded coverage: decoy UPNs + the decoy group, from the inventory. Coverage rules
 # are deterministic/inventory-scoped. The inventory stores the lure UPN (personas are object-id
 # only); the non-interactive rule covers the lure, the highest-value decoy identity.
 DECOY_UPNS_JSON=$(jq -c '[.identity.lure.upn] | map(select(. != null and . != ""))' "$INV" 2>/dev/null)
 DECOY_GROUP_ID=$(jq -r '.identity.decoyGroupIds[0] // ""' "$INV")
 # Coverage rules depend on NonInteractiveUserSignInLogs (and the breadth rule on
 # MicrosoftGraphActivityLogs), which exist only AFTER those logs first ingest. Default OFF;
-# enable once the tables have data:  ENABLE_COVERAGE_RULES=true ./deploy/03_detection.sh
+# enable once the tables have data:  ENABLE_COVERAGE_RULES=true ./deploy/detection.sh
 ENABLE_COVERAGE_RULES="${ENABLE_COVERAGE_RULES:-false}"
 
 WS_ID="/subscriptions/$CURRENT_SUB/resourceGroups/$MGMT_RG/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE"
@@ -60,7 +60,7 @@ ok "Entra diagnostic settings configured (logs take up to ~15 min to flow)"
 # --- 2. Sentinel onboarding + analytics rules ----------------------------------------------
 # Resource rules (Key Vault / storage) reference tables/columns that only exist once the
 # network module is deployed, so they are OFF unless you opt in. Enable after deploying the
-# network:  ENABLE_RESOURCE_RULES=true ./deploy/03_detection.sh
+# network:  ENABLE_RESOURCE_RULES=true ./deploy/detection.sh
 ENABLE_RESOURCE_RULES="${ENABLE_RESOURCE_RULES:-false}"
 
 info "Deploying detection (Sentinel + analytics rules) to $MGMT_RG"

@@ -62,7 +62,7 @@ for APP_ID in $(jq -r '.identity.decoyAppIds[]' "$INV"); do
   fi
 done
 
-# 6. Reachable edge (Phase 04): the decoy SP exists, the foothold can take it over, the SP has
+# 6. Reachable edge: the decoy SP exists, the foothold can take it over, the SP has
 #    NO consented Graph app roles (the god-mode request is unconsented), and its Azure RBAC is
 #    scoped ONLY to the decoy RG/KV — the contained payoff.
 REACH_APP_ID=$(jq -r '.identity.reachableApp.appId // ""' "$INV")
@@ -88,7 +88,7 @@ if [ -n "$REACH_APP_ID" ] && [ -n "$REACH_SP_ID" ]; then
   [ "${OWN:-0}" -ge 1 ] && pass "reachable app has $OWN owner(s) (foothold takeover primitive)" \
     || echo "NOTE: reachable app has no owners (set foothold_principal_object_id to seed the edge)."
 else
-  echo "NOTE: reachable edge not in inventory (Phase 04 not applied / synced) — skipping its checks."
+  echo "NOTE: reachable edge not in inventory — skipping its checks."
 fi
 
 # 7. OPSEC: no honeypot marker in attacker-visible names.
