@@ -1,12 +1,10 @@
 using '../network.bicep'
 
-param env = 'dev'
 param location = 'westeurope'
 param regionCode = 'weu'
-param marker = 'hp'
 
-// From the foundation deployment output. deploy/05_network.sh fills the subscription id for you.
-param workspaceId = '/subscriptions/REPLACE_SUB/resourceGroups/rg-hp-dev-weu-mgmt/providers/Microsoft.OperationalInsights/workspaces/log-hp-dev-weu'
+// From the foundation deployment output. deploy/network.sh fills the subscription id for you.
+param workspaceId = '/subscriptions/01169db8-9786-45a8-8878-de556ca253c4/resourceGroups/rg-hp-dev-weu-mgmt/providers/Microsoft.OperationalInsights/workspaces/log-hp-dev-weu'
 
 // DEMO: build the simulated production (hub + representative production spoke) and deploy the
 // honeypot alongside it. A REAL deployment sets deployProduction=false and supplies

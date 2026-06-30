@@ -14,7 +14,7 @@ param decoyStorageAccountName = 'stcoreprodREPLACE'
 param signInAllowlistIps = []
 
 // Reachable-edge — decoy app/SP ids from inventory.identity.reachableApp.
-// deploy/03_detection.sh injects these from the inventory; values here are for static validation.
+// deploy/detection.sh injects these from the inventory; values here are for static validation.
 param reachableAppId = ''
 param reachableSpObjectId = ''
 param enableReachableEdgeRules = false

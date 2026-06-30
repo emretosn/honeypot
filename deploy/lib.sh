@@ -29,3 +29,11 @@ require_login() {
   CURRENT_SUB="$(az account show --query id -o tsv)"
   info "Subscription: $CURRENT_SUB"
 }
+
+# True (exit 0) if a Log Analytics table exists in the given workspace GUID. A table only
+# resolves once it has ingested at least once, so this doubles as a "telemetry present" check.
+# Used to gate detection rules whose KQL Sentinel validates at rule-creation time.
+workspace_table_exists() {
+  local ws_guid="$1" table="$2"
+  az monitor log-analytics query -w "$ws_guid" --analytics-query "${table} | limit 1" -o none >/dev/null 2>&1
+}

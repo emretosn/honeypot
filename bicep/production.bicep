@@ -2,19 +2,17 @@ metadata description = 'PRODUCTION-SIMULATION composition (simulated existing en
 
 targetScope = 'subscription'
 
-import * as naming from 'modules/naming/naming.bicep'
-
-@description('Environment short name.')
-param env string = 'dev'
-
 @description('Location for all resources.')
 param location string = 'westeurope'
 
-@description('Region short code for internal-plane names.')
+@description('Region short code for resource names.')
 param regionCode string = 'weu'
 
-@description('Honeypot marker for the internal plane (hub). Hub is internal-mgmt, so the marker is allowed here.')
-param marker string = 'hp'
+@description('Hub resource group name. Production-plausible: the honeypot spoke peers to this hub, so its resource id (incl. this name) is readable from the spoke — NO honeypot marker.')
+param hubResourceGroupName string = 'rg-network-hub-${regionCode}'
+
+@description('Hub VNet name. Production-plausible: visible to the spoke via the peering resource id — NO honeypot marker.')
+param hubVnetName string = 'vnet-hub-${regionCode}'
 
 @description('Hub VNet address space.')
 param hubAddressPrefix string = '10.0.0.0/16'
@@ -28,10 +26,10 @@ param prodSpokeAddressPrefix string = '10.10.0.0/16'
 @description('Globally-unique production storage account name (3-24 lowercase alphanumeric).')
 param prodStorageAccountName string
 
-@description('Internal-plane tags (hub). Marker allowed.')
-param internalTags object = {
-  project: 'honeypot'
-  plane: 'internal-mgmt'
+@description('Hub tags. Production-plausible (shared network infra). NO honeypot marker — the spoke can read the hub resource id via peering, so nothing here may reveal the honeypot.')
+param hubTags object = {
+  environment: 'production'
+  workload: 'shared-network'
   managedBy: 'iac'
 }
 
@@ -42,22 +40,21 @@ param productionTags object = {
   managedBy: 'iac'
 }
 
-var hubRgName = 'rg-${naming.base(marker, env, regionCode)}-hub'
 var prodRgName = 'rg-${prodSpokeNamePrefix}-${regionCode}'
 
 resource hubRg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
-  name: hubRgName
+  name: hubResourceGroupName
   location: location
-  tags: internalTags
+  tags: hubTags
 }
 
 module hubVnet 'modules/network/vnet.bicep' = {
   name: 'hub-vnet'
   scope: hubRg
   params: {
-    name: 'vnet-${naming.base(marker, env, regionCode)}-hub'
+    name: hubVnetName
     location: location
-    tags: internalTags
+    tags: hubTags
     addressPrefixes: [hubAddressPrefix]
     subnets: [
       {

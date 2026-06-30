@@ -2,7 +2,7 @@
 # Populate inventory/decoy-inventory.json — the single source of truth shared by detection
 # (what to watch) and remediation (what it may act on). Pulls IDENTITY ids from the Terraform
 # outputs and (if the network plane is deployed) NETWORK resource ids from the Bicep
-# 'network' subscription deployment. Run after `terraform apply` and after deploy/05_network.sh.
+# 'network' subscription deployment. Run after `terraform apply` and after deploy/network.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,10 +52,10 @@ if command -v az >/dev/null 2>&1 && az account show >/dev/null 2>&1; then
     mv "$tmp" "$INV"
     echo "Updated $INV network section from the 'network' deployment outputs."
   else
-    echo "NOTE: no 'network' deployment found — network ids left empty (run deploy/05_network.sh first)."
+    echo "NOTE: no 'network' deployment found — network ids left empty (run deploy/network.sh first)."
   fi
 else
-  echo "NOTE: az not logged in — skipped network section (run after deploy/05_network.sh)."
+  echo "NOTE: az not logged in — skipped network section (run after deploy/network.sh)."
 fi
 
 if [ "$(jq '.allowlist.breakGlassObjectIds | length' "$INV")" -eq 0 ]; then

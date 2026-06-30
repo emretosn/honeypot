@@ -58,10 +58,25 @@ az rest --method put \
 ok "Entra diagnostic settings configured (logs take up to ~15 min to flow)"
 
 # --- 2. Sentinel onboarding + analytics rules ----------------------------------------------
-# Resource rules (Key Vault / storage) reference tables/columns that only exist once the
-# network module is deployed, so they are OFF unless you opt in. Enable after deploying the
-# network:  ENABLE_RESOURCE_RULES=true ./deploy/detection.sh
-ENABLE_RESOURCE_RULES="${ENABLE_RESOURCE_RULES:-false}"
+# Resource rules (Key Vault / storage) query AzureDiagnostics (KV AuditEvent) and StorageBlobLogs.
+# Those tables exist only AFTER the decoy KV/storage telemetry first ingests (~15-30 min after the
+# network deploy), and Sentinel validates the table at rule-creation time — so enabling them before
+# the tables exist fails the deploy. Auto-enable once BOTH tables are present in the workspace.
+# An explicit ENABLE_RESOURCE_RULES=true/false always overrides the auto-detection.
+if [ -n "${ENABLE_RESOURCE_RULES:-}" ]; then
+  info "Resource rules: ENABLE_RESOURCE_RULES=$ENABLE_RESOURCE_RULES (explicit override)"
+else
+  WS_GUID=$(az monitor log-analytics workspace show -g "$MGMT_RG" -n "$WORKSPACE" --query customerId -o tsv 2>/dev/null || echo "")
+  if [ -n "$WS_GUID" ] \
+     && workspace_table_exists "$WS_GUID" "AzureDiagnostics" \
+     && workspace_table_exists "$WS_GUID" "StorageBlobLogs"; then
+    ENABLE_RESOURCE_RULES="true"
+    info "Resource-rule telemetry present (AzureDiagnostics + StorageBlobLogs) — enabling decoy KV/storage rules"
+  else
+    ENABLE_RESOURCE_RULES="false"
+    info "Resource-rule telemetry not yet ingested — skipping decoy KV/storage rules (re-run later, or set ENABLE_RESOURCE_RULES=true)"
+  fi
+fi
 
 info "Deploying detection (Sentinel + analytics rules) to $MGMT_RG"
 az deployment group create \

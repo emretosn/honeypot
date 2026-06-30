@@ -18,8 +18,10 @@ cp config.env.example config.env       # set SUBSCRIPTION_ID + VERIFIED_DOMAIN
 ./foundation.sh && ./identity.sh && ./network.sh && ./edge.sh && ./detection.sh && ./response.sh
 ```
 
-Optional: `tests/attacker_test_user.sh create` (foothold). Enable coverage/resource rules once
-their tables ingest: `ENABLE_COVERAGE_RULES=true ENABLE_RESOURCE_RULES=true ./detection.sh`.
+Optional: `tests/attacker_test_user.sh create` (foothold). The decoy KV/storage (resource)
+rules auto-enable once their telemetry has ingested — just re-run `./detection.sh` later if they
+were skipped on the first pass. Coverage rules (non-interactive sign-in, Graph breadth) still need
+their tables and are opt-in: `ENABLE_COVERAGE_RULES=true ./detection.sh`.
 
 ## Teardown
 `./teardown.sh` removes everything (identities, RGs, Sentinel, playbooks, KV/storage) and resets

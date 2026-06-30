@@ -69,4 +69,4 @@ echo
 ok "Next:"
 echo "  - Grant the decoy SP its decoy-RG RBAC:  ./deploy/edge.sh"
 echo "  - Verify:  ./tests/verify_network.sh ${SPOKE_RG:-rg-core-prod-weu}"
-echo "  - Enable the decoy KV/storage detection rules: ENABLE_RESOURCE_RULES=true ./deploy/detection.sh"
+echo "  - Decoy KV/storage rules auto-enable once their telemetry has ingested; re-run detection.sh later if they were skipped (or force now: ENABLE_RESOURCE_RULES=true ./deploy/detection.sh)"

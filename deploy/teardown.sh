@@ -17,7 +17,7 @@ INV="$REPO_ROOT/inventory/decoy-inventory.json"
 TF_DIR="$REPO_ROOT/terraform/identity"
 SPOKE_RG="rg-core-prod-${REGION_CODE}"
 PROD_RG="rg-erp-prod-${REGION_CODE}"
-HUB_RG="rg-${MARKER}-${ENVN}-${REGION_CODE}-hub"
+HUB_RG="rg-network-hub-${REGION_CODE}"
 RGS=("$SPOKE_RG" "$PROD_RG" "$HUB_RG" "$MGMT_RG")
 
 echo "This will PERMANENTLY DELETE:"

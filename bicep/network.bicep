@@ -2,17 +2,11 @@ metadata description = 'Network ORCHESTRATOR for the demo. Composes the two inde
 
 targetScope = 'subscription'
 
-@description('Environment short name.')
-param env string = 'dev'
-
 @description('Location for all network resources.')
 param location string = 'westeurope'
 
 @description('Region short code.')
 param regionCode string = 'weu'
-
-@description('Honeypot marker for the internal plane (hub).')
-param marker string = 'hp'
 
 @description('Log Analytics workspace resource ID (from the foundation deployment).')
 param workspaceId string
@@ -67,10 +61,8 @@ param storageAccountName string
 module production 'production.bicep' = if (deployProduction) {
   name: 'production-sim'
   params: {
-    env: env
     location: location
     regionCode: regionCode
-    marker: marker
     hubAddressPrefix: hubAddressPrefix
     prodSpokeNamePrefix: prodSpokeNamePrefix
     prodSpokeAddressPrefix: prodSpokeAddressPrefix
