@@ -322,7 +322,7 @@ module ruleResourceAccess 'modules/detection/scheduledRule.bicep' = if (enableRe
   }
 }
 
-// 7. Reachable edge: a credential was added to the decoy app the foothold owns — the invited
+// 6. Reachable edge: a credential was added to the decoy app the foothold owns — the invited
 //    takeover action. Near-100% TP.
 module ruleCredentialAdd 'modules/detection/scheduledRule.bicep' = if (enableReachableEdgeRules) {
   name: 'rule-reachable-credential-add'
@@ -351,7 +351,7 @@ module ruleCredentialAdd 'modules/detection/scheduledRule.bicep' = if (enableRea
   }
 }
 
-// 8. Reachable edge: a sign-in AS the decoy service principal — the attacker has taken it over.
+// 7. Reachable edge: a sign-in AS the decoy service principal — the attacker has taken it over.
 module ruleSpSignIn 'modules/detection/scheduledRule.bicep' = if (enableReachableEdgeRules) {
   name: 'rule-reachable-sp-signin'
   dependsOn: [sentinel]
@@ -376,7 +376,7 @@ module ruleSpSignIn 'modules/detection/scheduledRule.bicep' = if (enableReachabl
   }
 }
 
-// 9. Coverage: non-interactive (token-based) sign-in as a decoy identity — token replay / AiTM.
+// 8. Coverage: non-interactive (token-based) sign-in as a decoy identity — token replay / AiTM.
 module ruleNonInteractive 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(decoyUpns)) {
   name: 'rule-decoy-noninteractive-signin'
   dependsOn: [sentinel]
@@ -404,7 +404,7 @@ module ruleNonInteractive 'modules/detection/scheduledRule.bicep' = if (enableCo
   }
 }
 
-// 10. Coverage: consent / app-role grant involving the decoy app/SP — the tripwire for the
+// 9. Coverage: consent / app-role grant involving the decoy app/SP — the tripwire for the
 //     unconsented god-mode permission the reachable app requests.
 module ruleConsentGrant 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(reachableSpObjectId)) {
   name: 'rule-decoy-consent-grant'
@@ -433,7 +433,7 @@ module ruleConsentGrant 'modules/detection/scheduledRule.bicep' = if (enableCove
   }
 }
 
-// 11. Coverage: member/owner added to the decoy group the lure owns.
+// 10. Coverage: member/owner added to the decoy group the lure owns.
 module ruleGroupChange 'modules/detection/scheduledRule.bicep' = if (enableCoverageRules && !empty(decoyGroupId)) {
   name: 'rule-decoy-group-change'
   dependsOn: [sentinel]
@@ -461,7 +461,7 @@ module ruleGroupChange 'modules/detection/scheduledRule.bicep' = if (enableCover
   }
 }
 
-// 12. Behavioural: directory-enumeration BREADTH anomaly (replaces the lure-UPN string match).
+// 11. Behavioural: directory-enumeration BREADTH anomaly (replaces the lure-UPN string match).
 //     Low severity — corroboration only, never a sole basis for auto-remediation.
 module ruleEnumerationBreadth 'modules/detection/scheduledRule.bicep' = if (enableEnumerationRule) {
   name: 'rule-decoy-enumeration-breadth'
