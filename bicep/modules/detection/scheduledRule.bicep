@@ -48,6 +48,9 @@ param enabled bool = true
 @description('Group all matches in a window into a single incident to avoid alert storms (ISO8601).')
 param suppressionDuration string = 'PT1H'
 
+@description('Incident grouping lookback window (ISO8601). New alerts sharing entities within this window fold into the existing incident. Default PT5H suits production; shorten (e.g. PT5M) during testing so each trigger opens a fresh incident.')
+param groupingLookbackDuration string = 'PT5H'
+
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
 }
@@ -75,7 +78,7 @@ resource rule 'Microsoft.SecurityInsights/alertRules@2024-09-01' = {
       groupingConfiguration: {
         enabled: true
         reopenClosedIncident: false
-        lookbackDuration: 'PT5H'
+        lookbackDuration: groupingLookbackDuration
         matchingMethod: 'AllEntities'
       }
     }

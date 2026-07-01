@@ -77,3 +77,20 @@ output "lure_password" {
   sensitive   = true
   description = "Lure password for the manual interactive sign-in validation scenario. Retrieve with: terraform output -raw lure_password"
 }
+
+output "emergency_access" {
+  value = {
+    upn                    = azuread_user.emergency.user_principal_name
+    object_id              = azuread_user.emergency.object_id
+    display_name           = azuread_user.emergency.display_name
+    administrative_unit_id = azuread_administrative_unit.emergency.object_id
+    reset_role_assigned    = length(azuread_directory_role_assignment.emergency_reset) > 0
+  }
+  description = "Standalone hollow admin the foothold can reset (Password Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard)."
+}
+
+output "emergency_access_password" {
+  value       = random_password.emergency.result
+  sensitive   = true
+  description = "Emergency-access decoy password (manual validation only). Retrieve with: terraform output -raw emergency_access_password"
+}

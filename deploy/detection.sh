@@ -18,6 +18,11 @@ REACHABLE_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
 ENABLE_REACHABLE_EDGE_RULES="false"
 [ -n "$REACHABLE_APP_ID" ] && [ -n "$REACHABLE_SP_ID" ] && ENABLE_REACHABLE_EDGE_RULES="true"
 
+# Emergency-access decoy (standalone reset-me path) — its rules auto-enable when it is in the
+# inventory. Any compromised identity can reset it; resetting or signing in as it is a tripwire.
+EMERGENCY_UPN=$(jq -r '.identity.emergencyAccess.upn // ""' "$INV")
+EMERGENCY_OID=$(jq -r '.identity.emergencyAccess.objectId // ""' "$INV")
+
 # Expanded coverage: decoy UPNs + the decoy group, from the inventory. Coverage rules
 # are deterministic/inventory-scoped. The inventory stores the lure UPN (personas are object-id
 # only); the non-interactive rule covers the lure, the highest-value decoy identity.
@@ -87,8 +92,10 @@ az deployment group create \
                enableResourceRules="$ENABLE_RESOURCE_RULES" \
                reachableAppId="$REACHABLE_APP_ID" reachableSpObjectId="$REACHABLE_SP_ID" \
                enableReachableEdgeRules="$ENABLE_REACHABLE_EDGE_RULES" \
+               emergencyAccessUpn="$EMERGENCY_UPN" emergencyAccessObjectId="$EMERGENCY_OID" \
                decoyUpns="$DECOY_UPNS_JSON" decoyGroupId="$DECOY_GROUP_ID" \
                enableCoverageRules="$ENABLE_COVERAGE_RULES" \
+               groupingLookbackDuration="${GROUPING_LOOKBACK:-PT5H}" \
                enableEnumerationRule="${ENABLE_ENUMERATION_RULE:-false}" \
   -o none
 ok "detection deployed (resource: $ENABLE_RESOURCE_RULES, reachable-edge: $ENABLE_REACHABLE_EDGE_RULES, coverage: $ENABLE_COVERAGE_RULES)"

@@ -27,7 +27,7 @@ DECOY_IDS='[]'
 DECOY_SP_IDS='[]'
 ALLOWLIST_IDS='[]'
 if [ -f "$INV" ]; then
-  DECOY_IDS=$(jq -c '[.identity.lure.objectId, (.identity.decoyPersonas[]?)] | map(select(. != null and . != ""))' "$INV")
+  DECOY_IDS=$(jq -c '[.identity.lure.objectId, (.identity.decoyPersonas[]?), .identity.emergencyAccess.objectId] | map(select(. != null and . != ""))' "$INV")
   DECOY_SP_IDS=$(jq -c '[.identity.reachableApp.spObjectId] | map(select(. != null and . != ""))' "$INV")
   ALLOWLIST_IDS=$(jq -c '(.allowlist.breakGlassObjectIds // []) + (.allowlist.agentObjectIds // []) | map(select(. != null and . != ""))' "$INV")
 fi
@@ -62,12 +62,30 @@ fi
 info "Deploying response (SOAR) to $MGMT_RG (dryRun=$DRY_RUN)"
 az deployment group create \
   --resource-group "$MGMT_RG" \
+  --name response \
   --template-file "$REPO_ROOT/bicep/response.bicep" \
   --parameters env="$ENVN" location="$REGION" regionCode="$REGION_CODE" marker="$MARKER" \
                workspaceName="$WORKSPACE" honeypotResourceGroupId="$SPOKE_RG_ID" dryRun="$DRY_RUN" \
                decoyObjectIds="$DECOY_IDS" decoySpObjectIds="$DECOY_SP_IDS" allowlistObjectIds="$ALLOWLIST_IDS" \
   -o none
 ok "response deployed (dryRun=$DRY_RUN)"
+
+# Grant each playbook's managed identity "Microsoft Sentinel Responder" on the mgmt RG so it can
+# post incident comments (the connection authenticates as the MI). Without this, even the dry-run
+# comment fails with 403 and the playbook run errors. Idempotent.
+DEPLOY_OUT=$(az deployment group show --resource-group "$MGMT_RG" --name response --query properties.outputs -o json 2>/dev/null || echo '{}')
+for MI in $(echo "$DEPLOY_OUT" | jq -r '(.disableUserPrincipalId.value // empty), (.isolateResourcePrincipalId.value // empty)'); do
+  [ -n "$MI" ] || continue
+  if az role assignment list --assignee "$MI" --scope "$MGMT_RG_SCOPE" \
+        --query "[?roleDefinitionName=='Microsoft Sentinel Responder']" -o tsv 2>/dev/null | grep -q .; then
+    ok "playbook MI $MI already has Microsoft Sentinel Responder"
+  else
+    az role assignment create --assignee-object-id "$MI" --assignee-principal-type ServicePrincipal \
+      --role "Microsoft Sentinel Responder" --scope "$MGMT_RG_SCOPE" -o none 2>/dev/null \
+      && ok "granted Microsoft Sentinel Responder to playbook MI $MI" \
+      || echo "  WARN: could not grant Sentinel Responder to $MI (need Owner/User Access Administrator on $MGMT_RG)"
+  fi
+done
 
 echo
 echo "  IMPORTANT one-time grants (see docs/detection-and-response.md), then re-test:"

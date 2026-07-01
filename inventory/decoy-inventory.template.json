@@ -20,6 +20,13 @@
       "spObjectId": "",
       "displayName": ""
     },
+    "emergencyAccess": {
+      "$comment": "Standalone hollow admin the foothold can reset (Password Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard).",
+      "upn": "",
+      "objectId": "",
+      "displayName": "",
+      "administrativeUnitId": ""
+    },
     "agentServicePrincipalId": ""
   },
   "network": {

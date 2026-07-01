@@ -91,6 +91,35 @@ else
   echo "NOTE: reachable edge not in inventory — skipping its checks."
 fi
 
+# 6b. Emergency-access decoy (standalone reset-me path): the account exists, is POWERLESS (no
+#     directory role, no Azure RBAC), and lives alone in its scoping AU so the reset power the
+#     foothold holds can touch nothing else.
+EMERGENCY_OID=$(jq -r '.identity.emergencyAccess.objectId // ""' "$INV")
+EMERGENCY_AU=$(jq -r '.identity.emergencyAccess.administrativeUnitId // ""' "$INV")
+if [ -n "$EMERGENCY_OID" ] && [ "$EMERGENCY_OID" != "null" ]; then
+  az ad user show --id "$EMERGENCY_OID" >/dev/null 2>&1 && pass "emergency-access decoy exists" || fail "emergency-access decoy missing"
+  # No Azure RBAC anywhere (powerless over every subscription).
+  E_RBAC=$(az role assignment list --assignee "$EMERGENCY_OID" --all -o json 2>/dev/null | jq 'length')
+  [ "${E_RBAC:-0}" -eq 0 ] && pass "emergency-access decoy has no Azure RBAC" \
+    || fail "emergency-access decoy has $E_RBAC Azure RBAC assignment(s) — must be zero"
+  # No directory role assignments (holds no admin power itself).
+  E_ROLES=$(az rest --method get \
+    --url "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?\$filter=principalId eq '$EMERGENCY_OID'" \
+    2>/dev/null | jq '.value | length')
+  [ "${E_ROLES:-0}" -eq 0 ] && pass "emergency-access decoy holds no directory role" \
+    || fail "emergency-access decoy holds $E_ROLES directory role(s) — it must be powerless"
+  # The scoping AU must contain ONLY this decoy (blast radius of the reset power = 1 account).
+  if [ -n "$EMERGENCY_AU" ] && [ "$EMERGENCY_AU" != "null" ]; then
+    AU_COUNT=$(az rest --method get \
+      --url "https://graph.microsoft.com/v1.0/directory/administrativeUnits/$EMERGENCY_AU/members?\$select=id" \
+      2>/dev/null | jq '.value | length')
+    [ "${AU_COUNT:-0}" -eq 1 ] && pass "emergency AU contains exactly 1 member (reset blast radius = the decoy only)" \
+      || fail "emergency AU contains ${AU_COUNT:-?} members — the reset power must scope to ONLY the decoy"
+  fi
+else
+  echo "NOTE: emergency-access decoy not in inventory — skipping its checks."
+fi
+
 # 7. OPSEC: no honeypot marker in attacker-visible names.
 NAMES=$(az ad user show --id "$LURE_ID" --query '{u:userPrincipalName,d:displayName}' -o tsv; \
         az ad group show --group "$GROUP_ID" --query displayName -o tsv 2>/dev/null)

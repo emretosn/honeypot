@@ -138,6 +138,40 @@ variable "decoy_key_vault_id" {
   description = "Resource ID of the decoy Key Vault (from inventory.network.keyVaultId). When set, the decoy SP is granted Key Vault Secrets User so it can read the honeytoken secrets. Empty = skip."
 }
 
+# --- Standalone reset-me deception (emergency-access decoy). See emergency_access.tf. ---
+
+variable "emergency_au_name" {
+  type        = string
+  default     = "Privileged Access"
+  description = "Display name of the dedicated single-member AU that holds only the emergency-access decoy (scopes the reset power to one account). Production-sounding, NO honeypot marker."
+}
+
+variable "emergency_upn_prefix" {
+  type        = string
+  default     = "emergency-access"
+  description = "UPN/mail-nickname prefix of the emergency-access decoy. Enticing, break-glass-sounding."
+}
+
+variable "emergency_display_name" {
+  type        = string
+  default     = "Emergency Access Admin"
+  description = "Display name of the emergency-access decoy. Privileged-sounding; the account has ZERO real power."
+}
+
+variable "emergency_job_title" {
+  type        = string
+  default     = "Emergency Access Administrator"
+  description = "Job title reinforcing the decoy's apparent privilege."
+}
+
+variable "emergency_reset_role_id" {
+  type = string
+  # Password Administrator (well-known built-in template ID). AU-scopable; can reset passwords for
+  # non-admins in scope only. Custom roles cannot hold the reset action, so a built-in role is required.
+  default     = "966707d0-3269-4727-9be2-8c3a10f19b9d"
+  description = "Built-in directory role template ID granted to the foothold at the emergency AU scope. Default = Password Administrator."
+}
+
 # --- Production/honeypot boundary & response contract inputs ---
 
 variable "deploy_production" {

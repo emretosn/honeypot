@@ -19,6 +19,11 @@ param reachableAppId = ''
 param reachableSpObjectId = ''
 param enableReachableEdgeRules = false
 
+// Emergency-access decoy (standalone reset-me path) — UPN + object id from
+// inventory.identity.emergencyAccess. Injected at deploy time; empty here disables its rules.
+param emergencyAccessUpn = ''
+param emergencyAccessObjectId = ''
+
 // Expanded coverage — decoy UPNs + group from the inventory. Injected at deploy time.
 param decoyUpns = []
 param decoyGroupId = ''
@@ -27,3 +32,7 @@ param enumerationBreadthThreshold = 200
 
 // Enumeration breadth-anomaly rule is best-effort/behavioural; off by default.
 param enableEnumerationRule = false
+
+// Incident grouping window. Default PT5H (production); shorten (e.g. PT5M) for repeat testing so
+// each trigger opens a fresh incident. deploy/detection.sh overrides via GROUPING_LOOKBACK.
+param groupingLookbackDuration = 'PT5H'

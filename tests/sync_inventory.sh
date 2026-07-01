@@ -28,6 +28,7 @@ jq \
   | .identity.decoyGroupIds = [ $tf.decoy_group_id.value ]
   | .identity.decoyAppIds = $tf.decoy_app_ids.value
   | .identity.reachableApp = { "$comment": (.identity.reachableApp."$comment" // "Reachable escalation edge."), appId: $tf.reachable_app.value.app_id, appObjectId: $tf.reachable_app.value.app_object_id, spObjectId: $tf.reachable_app.value.sp_object_id, displayName: $tf.reachable_app.value.display_name }
+  | .identity.emergencyAccess = { "$comment": (.identity.emergencyAccess."$comment" // "Standalone hollow admin the foothold can reset. Consumed by detection (reset + sign-in rules) and response (disable-user guard)."), upn: $tf.emergency_access.value.upn, objectId: $tf.emergency_access.value.object_id, displayName: $tf.emergency_access.value.display_name, administrativeUnitId: $tf.emergency_access.value.administrative_unit_id }
   | .allowlist.breakGlassObjectIds = ($tf.break_glass_object_ids.value // [])
   | .allowlist.agentNamedLocationCidrs = (.allowlist.agentNamedLocationCidrs // [])
   ' "$INV" > "$tmp"
