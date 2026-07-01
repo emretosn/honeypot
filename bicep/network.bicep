@@ -57,6 +57,13 @@ param keyVaultName string
 @description('Globally-unique decoy storage account name.')
 param storageAccountName string
 
+@description('Lure-credential honeytoken secret name (empty disables). Threaded to the honeypot KV.')
+param lureSecretName string = ''
+
+@description('Lure-credential honeytoken value (UPN + password). network.sh reads it from the identity Terraform output via readEnvironmentVariable; never written to the inventory. Empty disables.')
+@secure()
+param lureSecretValue string = ''
+
 // PRODUCTION (simulated environment) — built only in demo mode.
 module production 'production.bicep' = if (deployProduction) {
   name: 'production-sim'
@@ -92,6 +99,8 @@ module honeypot 'honeypot.bicep' = {
     decoyVmCustomDataBase64: decoyVmCustomDataBase64
     keyVaultName: keyVaultName
     storageAccountName: storageAccountName
+    lureSecretName: lureSecretName
+    lureSecretValue: lureSecretValue
   }
 }
 

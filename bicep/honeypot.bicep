@@ -42,6 +42,13 @@ param keyVaultName string
 @description('Globally-unique decoy storage account name (3-24 lowercase alphanumeric, production-looking).')
 param storageAccountName string
 
+@description('Lure-credential honeytoken secret name (empty disables). Threaded to the spoke KV.')
+param lureSecretName string = ''
+
+@description('Lure-credential honeytoken value (UPN + password). Threaded from the identity output via network.sh; empty disables.')
+@secure()
+param lureSecretValue string = ''
+
 @description('Decoy-plane tags. Honeypot ownership lives here, NOT in names.')
 param decoyTags object = {
   environment: 'production'
@@ -79,6 +86,8 @@ module spoke 'modules/spoke/honeypotSpoke.bicep' = {
     decoyVmCustomDataBase64: decoyVmCustomDataBase64
     keyVaultName: keyVaultName
     storageAccountName: storageAccountName
+    lureSecretName: lureSecretName
+    lureSecretValue: lureSecretValue
   }
 }
 

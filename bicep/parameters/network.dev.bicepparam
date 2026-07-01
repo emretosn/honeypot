@@ -29,3 +29,9 @@ param storageAccountName = 'stcoreprod32548272'
 param includeDecoyVm = false
 // param decoyVmSshPublicKey = 'ssh-rsa AAAA...'   // required only when includeDecoyVm = true
 // param decoyVmCustomDataBase64 = '...'           // base64 -w0 bicep/assets/decoy-cloud-init.yaml
+
+// Lure-credential honeytoken. network.sh exports these from the identity Terraform output (the real
+// lure UPN + password), so recon (a decoy KV secret read) leads to the lure and a sign-in attempt
+// trips the lure rules. Empty when the identity stage has not run. Never written to the inventory.
+param lureSecretName = readEnvironmentVariable('LURE_SECRET_NAME', '')
+param lureSecretValue = readEnvironmentVariable('LURE_SECRET_VALUE', '')

@@ -15,6 +15,13 @@ param workspaceId string
 @description('Resource tags.')
 param tags object = {}
 
+@description('Name of the lure-credential honeytoken secret (e.g. "identity-admin-credentials"). Empty disables it. When set, the lure UPN + password are planted so recon (a KV secret read) LEADS to the lure: a sign-in attempt as the lure then trips the lure sign-in rule. MFA still blocks actual access — the attempt is the signal.')
+param lureSecretName string = ''
+
+@description('Value of the lure-credential honeytoken (UPN + password breadcrumb). Threaded from the identity Terraform output via network.sh; never written to the inventory. Empty disables it.')
+@secure()
+param lureSecretValue string = ''
+
 @description('Honeytoken secrets to plant in the decoy vault — name/value pairs. These are inert canaries (never real). Reading any of them is a tripwire (the decoy-kv-read rule). Default plants a couple of credential-shaped breadcrumbs.')
 param honeytokenSecrets array = [
   {
@@ -81,6 +88,17 @@ resource secrets 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
     }
   }
 ]
+
+// Lure-credential honeytoken — planted only when supplied (identity stage has run and network.sh
+// threaded the value). Same control-plane planting as above. Connects the recon path to the lure:
+// reading this trips the KV-read rule, and trying the creds trips the lure sign-in rule.
+resource lureSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(lureSecretName) && !empty(lureSecretValue)) {
+  parent: vault
+  name: lureSecretName
+  properties: {
+    value: lureSecretValue
+  }
+}
 
 output id string = vault.id
 output name string = vault.name

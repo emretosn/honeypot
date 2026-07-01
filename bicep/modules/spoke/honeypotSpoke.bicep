@@ -37,6 +37,13 @@ param keyVaultName string
 @description('Globally-unique decoy storage account name (3-24 lowercase alphanumeric).')
 param storageAccountName string
 
+@description('Lure-credential honeytoken secret name (empty disables). Threaded to the KV module.')
+param lureSecretName string = ''
+
+@description('Lure-credential honeytoken value (UPN + password). Threaded from the identity output via network.sh; empty disables.')
+@secure()
+param lureSecretValue string = ''
+
 @description('Resource tags. Honeypot ownership lives in a tag the decoy-scoped identity cannot read, never in names.')
 param tags object = {}
 
@@ -211,6 +218,8 @@ module keyVault '../spoke/keyVault.bicep' = {
     tags: tags
     tenantId: tenantId
     workspaceId: workspaceId
+    lureSecretName: lureSecretName
+    lureSecretValue: lureSecretValue
   }
 }
 

@@ -36,6 +36,23 @@ if grep -q 'REPLACE' "$PARAM"; then
   die "unfilled REPLACE placeholder(s) in $PARAM — fix before deploying."
 fi
 
+# Lure-credential honeytoken: if the identity stage has run, plant the REAL lure UPN + password in
+# the decoy Key Vault so recon leads to the lure and a sign-in attempt trips the lure rules. The
+# value is read by the .bicepparam via readEnvironmentVariable and passed as a @secure() param — it
+# is never written to the inventory. Skipped cleanly if the identity output is unavailable.
+INV="$REPO_ROOT/inventory/decoy-inventory.json"
+LURE_UPN=$(jq -r '.identity.lure.upn // ""' "$INV" 2>/dev/null)
+LURE_PW=$(terraform -chdir="$REPO_ROOT/terraform/identity" output -raw lure_password 2>/dev/null || echo "")
+if [ -n "$LURE_UPN" ] && [ "$LURE_UPN" != "null" ] && [ -n "$LURE_PW" ]; then
+  export LURE_SECRET_NAME="identity-admin-credentials"
+  export LURE_SECRET_VALUE="${LURE_UPN} / ${LURE_PW}"
+  info "Planting lure-credential honeytoken '$LURE_SECRET_NAME' in the decoy Key Vault"
+else
+  export LURE_SECRET_NAME=""
+  export LURE_SECRET_VALUE=""
+  info "Lure credential not available (identity stage not applied) — skipping lure honeytoken"
+fi
+
 info "Preview (what-if)"
 az deployment sub create \
   --location "$REGION" \
