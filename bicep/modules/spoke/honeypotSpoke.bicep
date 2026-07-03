@@ -103,7 +103,9 @@ module workloadNsg '../network/nsg.bicep' = {
 }
 
 // App Gateway subnet NSG: allow internet HTTP in + the GatewayManager ports App Gateway v2 requires.
-module appGwNsg '../network/nsg.bicep' = {
+// Deployed only with the decoy VM/App Gateway — otherwise the appgw subnet is never created, so
+// there is nothing for this NSG to guard.
+module appGwNsg '../network/nsg.bicep' = if (includeDecoyVm) {
   name: '${namePrefix}-appgw-nsg'
   params: {
     name: '${namePrefix}-appgw-nsg'
@@ -153,6 +155,23 @@ module appGwNsg '../network/nsg.bicep' = {
   }
 }
 
+// The appgw subnet exists only to host the App Gateway, so it is created only with the decoy VM.
+// The workload subnet is always present (hosts the decoy VM when enabled; otherwise stays empty).
+var appGwSubnet = includeDecoyVm ? [
+  {
+    name: 'appgw-subnet'
+    prefix: appGwSubnetPrefix
+    nsgId: appGwNsg!.outputs.id
+  }
+] : []
+var spokeSubnets = concat(appGwSubnet, [
+  {
+    name: 'workload-subnet'
+    prefix: workloadSubnetPrefix
+    nsgId: workloadNsg.outputs.id
+  }
+])
+
 module vnet '../network/vnet.bicep' = {
   name: '${namePrefix}-vnet'
   params: {
@@ -160,18 +179,7 @@ module vnet '../network/vnet.bicep' = {
     location: location
     tags: tags
     addressPrefixes: [vnetAddressPrefix]
-    subnets: [
-      {
-        name: 'appgw-subnet'
-        prefix: appGwSubnetPrefix
-        nsgId: appGwNsg.outputs.id
-      }
-      {
-        name: 'workload-subnet'
-        prefix: workloadSubnetPrefix
-        nsgId: workloadNsg.outputs.id
-      }
-    ]
+    subnets: spokeSubnets
   }
 }
 

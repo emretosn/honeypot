@@ -97,6 +97,7 @@ az deployment group create \
                enableCoverageRules="$ENABLE_COVERAGE_RULES" \
                groupingLookbackDuration="${GROUPING_LOOKBACK:-PT5H}" \
                enableEnumerationRule="${ENABLE_ENUMERATION_RULE:-false}" \
+               enableFootholdProbeRule="${ENABLE_FOOTHOLD_PROBE_RULE:-${ENABLE_ENUMERATION_RULE:-false}}" \
   -o none
 ok "detection deployed (resource: $ENABLE_RESOURCE_RULES, reachable-edge: $ENABLE_REACHABLE_EDGE_RULES, coverage: $ENABLE_COVERAGE_RULES)"
 

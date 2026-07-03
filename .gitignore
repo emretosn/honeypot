@@ -40,3 +40,7 @@ inventory/decoy-inventory.json
 
 # AzureHound
 azurehound.json
+
+# VM keys
+decoy_key
+decoy_key.pub

@@ -41,6 +41,9 @@ param emergencyAccessObjectId string = ''
 @description('Enable the best-effort enumeration-anomaly rule (noisier, P-licensed sources).')
 param enableEnumerationRule bool = false
 
+@description('Enable the foothold privilege-probe rule: a non-allowlisted principal getting DENIED (401/403) on a privileged directory write (password reset, role/credential management) against a NON-decoy target. Catches the attacker testing the reach of their scoped role BEFORE they touch a decoy. Uses MicrosoftGraphActivityLogs (same P-licensed source as the enumeration rule), so it is off by default and enabled with it.')
+param enableFootholdProbeRule bool = false
+
 @description('Enable the expanded coverage rules (non-interactive sign-in, consent/app-role grant, group member/owner change). Inventory-scoped and deterministic.')
 param enableCoverageRules bool = false
 
@@ -194,6 +197,29 @@ var qEnumerationBreadth = join([
   '| where DistinctObjects > ${enumerationBreadthThreshold}'
   '| extend ActorAppId = AppId'
   '| project TimeGenerated, ActorAppId, IPAddress, DistinctObjects'
+], '\n')
+
+// Foothold privilege-probe: a non-allowlisted principal DENIED (401/403) on a privileged directory
+// WRITE (password reset, authentication-method reset, role/credential management) against a target
+// that is NOT the emergency-access decoy. This is the natural first move of an attacker who sees a
+// role in enumeration (e.g. an AU-scoped Password Administrator rendered as tenant-wide) and tests
+// its real reach against a genuine admin — an attempt that succeeds nowhere, so it never trips a
+// decoy rule, yet is a high-fidelity sign of a compromised principal mapping its escalation power.
+// Best-effort/corroboration: attempt (not success), never a sole basis for auto-remediation.
+var qFootholdProbe = join([
+  'MicrosoftGraphActivityLogs'
+  '| where ResponseStatusCode in (401, 403)'
+  '| where RequestMethod in ("PATCH", "POST", "PUT", "DELETE")'
+  // password-reset / auth-method / directory-role / app-credential shaped privileged writes
+  '| where RequestUri has_any ("/users/", "resetPassword", "authenticationMethods", "/directoryRoles", "/roleManagement", "/roleAssignments", "addKey", "addPassword")'
+  '| where IPAddress !in (${allowlistLiteral})'
+  // the decoy has its own dedicated (success) rules; don't double-count writes aimed at it
+  '| where "${emergencyAccessObjectId}" == "" or RequestUri !has "${emergencyAccessObjectId}"'
+  '| extend ActorId = tostring(coalesce(UserId, ServicePrincipalId, ""))'
+  '| extend ActorApp = tostring(AppId)'
+  '| extend ActorIp = tostring(IPAddress)'
+  '| summarize DeniedAttempts = count(), DistinctTargets = dcount(RequestUri), SampleUris = make_set(RequestUri, 5), TimeGenerated = max(TimeGenerated) by ActorId, ActorApp, ActorIp'
+  '| project TimeGenerated, ActorId, ActorApp, ActorIp, DeniedAttempts, DistinctTargets, SampleUris'
 ], '\n')
 
 // Emergency-access decoy: password reset targeting it — the invited escalation action. Any
@@ -593,6 +619,33 @@ module ruleEmergencySignIn 'modules/detection/scheduledRule.bicep' = if (!empty(
       {
         entityType: 'IP'
         fieldMappings: [{ identifier: 'Address', columnName: 'IPAddress' }]
+      }
+    ]
+  }
+}
+
+// 14. Foothold privilege-probe: DENIED privileged write against a non-decoy target — the attacker
+//     testing the true reach of a scoped role before touching a decoy (closes the 403 blind spot).
+module ruleFootholdProbe 'modules/detection/scheduledRule.bicep' = if (enableFootholdProbeRule) {
+  name: 'rule-foothold-privilege-probe'
+  dependsOn: [sentinel]
+  params: {
+    workspaceName: workspaceName
+    ruleId: guid(workspaceName, 'foothold-privilege-probe')
+    groupingLookbackDuration: groupingLookbackDuration
+    displayName: 'Honeypot: denied privileged directory action against a non-decoy (foothold probe)'
+    ruleDescription: 'A non-allowlisted principal was DENIED (401/403) on a privileged directory write (password reset, authentication-method reset, role or app-credential management) against a target that is NOT the emergency-access decoy. Legitimate admins operate from allowlisted locations and rarely hit authorization denials on these operations, so this is the pattern of a compromised principal probing the real reach of a role it saw in enumeration (e.g. an AU-scoped Password Administrator that looks tenant-wide). Best-effort corroboration: an attempt that succeeds nowhere and thus trips no decoy rule — never a sole basis for auto-remediation.'
+    severity: 'Medium'
+    tactics: ['PrivilegeEscalation', 'Discovery']
+    query: qFootholdProbe
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [{ identifier: 'AadUserId', columnName: 'ActorId' }]
+      }
+      {
+        entityType: 'IP'
+        fieldMappings: [{ identifier: 'Address', columnName: 'ActorIp' }]
       }
     ]
   }
