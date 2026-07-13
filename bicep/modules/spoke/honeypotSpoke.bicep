@@ -105,6 +105,12 @@ module workloadNsg '../network/nsg.bicep' = {
 // App Gateway subnet NSG: allow internet HTTP in + the GatewayManager ports App Gateway v2 requires.
 // Deployed only with the decoy VM/App Gateway — otherwise the appgw subnet is never created, so
 // there is nothing for this NSG to guard.
+// NOTE: this subnet holds ONLY the managed App Gateway (a PaaS resource, not attacker-controlled
+// compute), so it intentionally carries NO custom outbound rules. App Gateway v2 preflight rejects
+// the presence of ANY custom outbound Deny on its subnet ("outbound Internet connectivity can't be
+// blocked"; custom outbound denies need the private-deployment/enhanced-network-control feature).
+// Production-egress containment is enforced where it matters — the workload subnet (the decoy VM,
+// the only attacker foothold) keeps its own Deny-Egress-To-Production rule.
 module appGwNsg '../network/nsg.bicep' = if (includeDecoyVm) {
   name: '${namePrefix}-appgw-nsg'
   params: {
@@ -136,19 +142,6 @@ module appGwNsg '../network/nsg.bicep' = if (includeDecoyVm) {
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '65200-65535'
-        }
-      }
-      {
-        name: 'Deny-Egress-To-Production'
-        properties: {
-          priority: 100
-          direction: 'Outbound'
-          access: 'Deny'
-          protocol: '*'
-          sourceAddressPrefix: '*'
-          sourcePortRange: '*'
-          destinationAddressPrefixes: productionAddressPrefixes
-          destinationPortRange: '*'
         }
       }
     ]

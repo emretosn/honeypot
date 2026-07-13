@@ -18,7 +18,8 @@ TF_DIR="$REPO_ROOT/terraform/identity"
 SPOKE_RG="rg-core-prod-${REGION_CODE}"
 PROD_RG="rg-erp-prod-${REGION_CODE}"
 HUB_RG="rg-network-hub-${REGION_CODE}"
-RGS=("$SPOKE_RG" "$PROD_RG" "$HUB_RG" "$MGMT_RG")
+PLAYBOOK_RG="rg-core-ops-${REGION_CODE}"
+RGS=("$SPOKE_RG" "$PROD_RG" "$HUB_RG" "$PLAYBOOK_RG" "$MGMT_RG")
 
 echo "This will PERMANENTLY DELETE:"
 echo "  - decoy identities, apps/SPs, role/RBAC, Conditional Access (terraform destroy)"

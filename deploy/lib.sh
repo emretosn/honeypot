@@ -33,7 +33,9 @@ require_login() {
 # True (exit 0) if a Log Analytics table exists in the given workspace GUID. A table only
 # resolves once it has ingested at least once, so this doubles as a "telemetry present" check.
 # Used to gate detection rules whose KQL Sentinel validates at rule-creation time.
+# Hard-bounded with `timeout`: a query for a not-yet-ingested table can hang indefinitely, so a
+# timeout (exit 124) is treated the same as "table absent" — the caller then skips those rules.
 workspace_table_exists() {
   local ws_guid="$1" table="$2"
-  az monitor log-analytics query -w "$ws_guid" --analytics-query "${table} | limit 1" -o none >/dev/null 2>&1
+  timeout 30 az monitor log-analytics query -w "$ws_guid" --analytics-query "${table} | limit 1" -o none >/dev/null 2>&1
 }

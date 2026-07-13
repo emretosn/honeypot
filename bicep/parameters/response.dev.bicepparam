@@ -1,9 +1,12 @@
 using '../response.bicep'
 
-param env = 'dev'
 param location = 'westeurope'
 param regionCode = 'weu'
-param marker = 'hp'
+
+// The management RG that holds the Log Analytics workspace + Sentinel. The automation rules are
+// created here cross-scope; the playbooks themselves deploy into the production-plausible playbook
+// RG (rg-core-ops-*, set by the --resource-group of deploy/response.sh).
+param mgmtResourceGroupName = 'rg-hp-dev-weu-mgmt'
 
 param workspaceName = 'log-hp-dev-weu'
 

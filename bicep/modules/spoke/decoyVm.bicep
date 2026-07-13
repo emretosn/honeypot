@@ -16,8 +16,8 @@ param adminUsername string = 'sysadmin'
 @secure()
 param adminSshPublicKey string
 
-@description('VM size. B-series keeps the decoy cheap; accepted realism tradeoff.')
-param vmSize string = 'Standard_B1s'
+@description('VM size. B-series is cheapest but is capacity/Location-restricted for some subscriptions/regions (e.g. westeurope), so this defaults to the smallest broadly-available Dsv-series SKU. Override per-environment if a cheaper size is available to you.')
+param vmSize string = 'Standard_D2s_v3'
 
 @description('Base64 cloud-init that plants fake-prod breadcrumbs. Caller supplies content.')
 param customDataBase64 string = ''

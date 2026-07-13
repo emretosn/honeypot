@@ -7,20 +7,35 @@ set -euo pipefail
 
 MGMT_RG="${1:-rg-hp-dev-weu-mgmt}"
 WORKSPACE="${2:-log-hp-dev-weu}"
-BASENAME="${3:-hp-dev-weu}"
+PLAYBOOK_RG="${3:-rg-core-ops-weu}"
+REGION_CODE="${4:-weu}"
 
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
 
 SUB=$(az account show --query id -o tsv)
-DISABLE="pb-${BASENAME}-disable-user"
-ISOLATE="pb-${BASENAME}-isolate-resource"
+# Playbooks are production-plausible, purpose-hidden Logic Apps in the (non-marked) playbook RG:
+# '01' = disable-user, '02' = isolate-resource. Their managed identities are directory-visible, so
+# the names deliberately carry no honeypot marker and no "disable"/"isolate" wording.
+DISABLE="logic-core-ops-${REGION_CODE}-01"
+ISOLATE="logic-core-ops-${REGION_CODE}-02"
 
 echo "== Response (SOAR) verification =="
 
+# 0. OPSEC: neither playbook name may carry the honeypot marker (managed identities leak the name
+#    directory-wide via AzureHound), and the playbook RG must not be the marked mgmt RG.
+for pb in "$DISABLE" "$ISOLATE"; do
+  echo "$pb" | grep -qiE '(^|[-_])hp([-_]|$)|disable|isolate' \
+    && fail "playbook name '$pb' leaks the honeypot marker or its purpose (visible via the managed-identity SP)" \
+    || pass "playbook name '$pb' is production-plausible (no marker / purpose leak)"
+done
+echo "$PLAYBOOK_RG" | grep -qiE '(^|[-_])hp([-_]|$)' \
+  && fail "playbook RG '$PLAYBOOK_RG' carries the honeypot marker (leaks via the MI resource path)" \
+  || pass "playbook RG '$PLAYBOOK_RG' is production-plausible (no marker)"
+
 # 1. Playbooks exist with a system-assigned managed identity.
 for pb in "$DISABLE" "$ISOLATE"; do
-  J=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$MGMT_RG/providers/Microsoft.Logic/workflows/$pb?api-version=2019-05-01" 2>/dev/null) || fail "playbook missing: $pb"
+  J=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$pb?api-version=2019-05-01" 2>/dev/null) || fail "playbook missing: $pb"
   pass "playbook exists: $pb"
   PRINC=$(echo "$J" | jq -r '.identity.principalId // empty')
   [ -n "$PRINC" ] && pass "  has managed identity ($PRINC)" || fail "  $pb has no managed identity"
@@ -29,7 +44,7 @@ for pb in "$DISABLE" "$ISOLATE"; do
 done
 
 # 2. Disable-user playbook contains the TWO-KEY safety guard in its definition.
-DEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$MGMT_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
+DEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
 echo "$DEF" | grep -q 'decoyObjectIds'   && pass "disable-user keys on decoyObjectIds (acts only on decoy identities)" || fail "decoyObjectIds guard missing — playbook could act on non-decoys!"
 echo "$DEF" | grep -q 'allowlistObjectIds' && pass "disable-user honors the allowlist (break-glass/agent backstop)" || fail "allowlist guard missing from disable-user playbook!"
 echo "$DEF" | grep -q 'Comment_not_a_decoy' && pass "disable-user has the fail-loud 'not a decoy' branch (no silent skips)" || fail "fail-loud 'not a decoy' branch missing"
@@ -38,11 +53,11 @@ echo "$DEF" | grep -q 'decoySpObjectIds' && pass "disable-user can disable decoy
 echo "$DEF" | grep -q 'servicePrincipals' && pass "disable endpoint covers servicePrincipals" || fail "servicePrincipals endpoint missing from disable action"
 
 # 2b. Confirm decoyObjectIds is actually populated (else the guard would never act).
-DECOY_N=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$MGMT_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq '(.properties.parameters.decoyObjectIds.value // []) | length')
+DECOY_N=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq '(.properties.parameters.decoyObjectIds.value // []) | length')
 [ "${DECOY_N:-0}" -ge 1 ] && pass "decoyObjectIds populated ($DECOY_N id(s))" || echo "  NOTE: decoyObjectIds is empty — run tests/sync_inventory.sh and redeploy response before enforcing."
 
 # 2c. Isolate-resource playbook scopes to the honeypot RG with a fail-loud branch.
-IDEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$MGMT_RG/providers/Microsoft.Logic/workflows/$ISOLATE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
+IDEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$ISOLATE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
 echo "$IDEF" | grep -q 'honeypotResourceGroupId' && pass "isolate-resource scoped to the honeypot resource group" || fail "isolate-resource scope guard missing!"
 echo "$IDEF" | grep -q 'Comment_not_honeypot' && pass "isolate-resource has the fail-loud 'not a honeypot resource' branch" || fail "fail-loud 'not honeypot' branch missing from isolate-resource"
 

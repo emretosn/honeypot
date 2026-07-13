@@ -1,20 +1,17 @@
-metadata description = 'Response plane (SOAR). Deploys two Logic App playbooks — Disable-User-And-Revoke-Sessions and Isolate-Honeypot-Resource — plus the Microsoft Sentinel automation rules that run them on honeypot incidents. SAFETY by design: both playbooks default to dryRun=true and honor an allowlist / honeypot-scope guard so they can never action a real admin or a non-honeypot resource. Deploy scoped to the foundation management resource group.'
+metadata description = 'Response plane (SOAR). Deploys two Logic App playbooks — Disable-User-And-Revoke-Sessions and Isolate-Honeypot-Resource — plus the Microsoft Sentinel automation rules that run them on honeypot incidents. SAFETY by design: both playbooks default to dryRun=true and honor an allowlist / honeypot-scope guard so they can never action a real admin or a non-honeypot resource. Deploy scoped to the PRODUCTION-PLAUSIBLE playbook RG (rg-core-ops-*, no marker): playbook managed identities leak into the directory, so they must not carry the honeypot marker. The automation rules are created cross-scope in the management RG that holds the workspace (mgmtResourceGroupName).'
 
 targetScope = 'resourceGroup'
 
 import * as naming from 'modules/naming/naming.bicep'
 
-@description('Environment short name.')
-param env string = 'dev'
-
 @description('Location for the playbooks.')
 param location string = 'westeurope'
 
-@description('Region short code for internal-plane names.')
+@description('Region short code used to build the production-plausible playbook names.')
 param regionCode string = 'weu'
 
-@description('Honeypot marker (internal plane).')
-param marker string = 'hp'
+@description('Name of the management resource group that holds the Log Analytics workspace + Sentinel. The automation rules are created here (cross-scope) while the playbooks live in this production-plausible resource group.')
+param mgmtResourceGroupName string
 
 @description('Name of the Log Analytics workspace Sentinel runs on.')
 param workspaceName string
@@ -34,14 +31,12 @@ param honeypotResourceGroupId string
 @description('Dry-run for BOTH playbooks. Keep true for the initial soak; set false to enforce.')
 param dryRun bool = true
 
-@description('Internal-plane tags.')
+@description('Tags for the playbook RG resources. Production-plausible (NOT the internal-mgmt marker): these resources sit in the production-looking playbook RG and their managed identities are directory-visible, so honeypot ownership is tracked in the inventory, not in tags/names.')
 param tags object = {
-  project: 'honeypot'
-  plane: 'internal-mgmt'
+  environment: 'production'
+  workload: 'platform-automation'
   managedBy: 'iac'
 }
-
-var baseName = naming.base(marker, env, regionCode)
 
 module sentinelConnection 'modules/response/sentinelConnection.bicep' = {
   name: 'sentinel-connection'
@@ -52,10 +47,12 @@ module sentinelConnection 'modules/response/sentinelConnection.bicep' = {
   }
 }
 
+// Playbook (Logic App) names are production-plausible and purpose-hidden because their managed
+// identities are directory-visible. '01' = the disable-user playbook; '02' = isolate-resource.
 module disableUser 'modules/response/playbookDisableUser.bicep' = {
   name: 'pb-disable-user'
   params: {
-    name: 'pb-${baseName}-disable-user'
+    name: naming.playbookName(regionCode, '01')
     location: location
     tags: tags
     sentinelConnectionId: sentinelConnection.outputs.id
@@ -69,7 +66,7 @@ module disableUser 'modules/response/playbookDisableUser.bicep' = {
 module isolateResource 'modules/response/playbookIsolateResource.bicep' = {
   name: 'pb-isolate-resource'
   params: {
-    name: 'pb-${baseName}-isolate-resource'
+    name: naming.playbookName(regionCode, '02')
     location: location
     tags: tags
     sentinelConnectionId: sentinelConnection.outputs.id
@@ -78,8 +75,11 @@ module isolateResource 'modules/response/playbookIsolateResource.bicep' = {
   }
 }
 
+// Automation rules are child resources of the Sentinel workspace, so they are created cross-scope
+// in the management RG (where the workspace lives), not in this playbook RG.
 module ruleDisableUser 'modules/response/automationRule.bicep' = {
   name: 'ar-disable-user'
+  scope: resourceGroup(mgmtResourceGroupName)
   params: {
     workspaceName: workspaceName
     automationRuleId: guid(workspaceName, 'ar-disable-user')
@@ -91,6 +91,7 @@ module ruleDisableUser 'modules/response/automationRule.bicep' = {
 
 module ruleIsolateResource 'modules/response/automationRule.bicep' = {
   name: 'ar-isolate-resource'
+  scope: resourceGroup(mgmtResourceGroupName)
   params: {
     workspaceName: workspaceName
     automationRuleId: guid(workspaceName, 'ar-isolate-resource')
