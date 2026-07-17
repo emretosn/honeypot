@@ -1,4 +1,4 @@
-metadata description = 'Response plane (SOAR). Deploys two Logic App playbooks — Disable-User-And-Revoke-Sessions and Isolate-Honeypot-Resource — plus the Microsoft Sentinel automation rules that run them on honeypot incidents. SAFETY by design: both playbooks default to dryRun=true and honor an allowlist / honeypot-scope guard so they can never action a real admin or a non-honeypot resource. Deploy scoped to the PRODUCTION-PLAUSIBLE playbook RG (rg-core-ops-*, no marker): playbook managed identities leak into the directory, so they must not carry the honeypot marker. The automation rules are created cross-scope in the management RG that holds the workspace (mgmtResourceGroupName).'
+metadata description = 'Response plane (SOAR). Deploys two Logic App playbooks (Disable-User-And-Revoke-Sessions and Isolate-Honeypot-Resource) plus the Microsoft Sentinel automation rules that run them on honeypot incidents. A two-key guard restricts each playbook to the decoy inventory objects (never a real admin or non-honeypot resource), and the allowlist protects break-glass and every Global Administrator. Deployed into the same production-plausible management/operations resource group that hosts the workspace and Sentinel (no honeypot marker in any name, because a playbook managed identity leaks its resource-id path directory-wide). The automation rules are created in this same resource group.'
 
 targetScope = 'resourceGroup'
 
@@ -10,26 +10,20 @@ param location string = 'westeurope'
 @description('Region short code used to build the production-plausible playbook names.')
 param regionCode string = 'weu'
 
-@description('Name of the management resource group that holds the Log Analytics workspace + Sentinel. The automation rules are created here (cross-scope) while the playbooks live in this production-plausible resource group.')
-param mgmtResourceGroupName string
-
-@description('Name of the Log Analytics workspace Sentinel runs on.')
+@description('Name of the Log Analytics workspace Sentinel runs on (in this same resource group).')
 param workspaceName string
 
-@description('Decoy identity object IDs the disable-user playbook is allowed to act on (lure + personas + canary identities, from inventory.identity). The playbook disables an account ONLY if it is in this list — this is the primary guard that makes remediation incapable of touching a real account.')
+@description('Decoy identity object IDs the disable-user playbook is allowed to act on (the emergency-access decoy, from inventory.identity). The playbook disables an account only if it is in this list, the primary guard that makes remediation incapable of touching a real account.')
 param decoyObjectIds array = []
 
 @description('Decoy SERVICE PRINCIPAL object IDs the disable-user playbook may disable (the reachable decoy SP). Disabling these uses the /servicePrincipals Graph endpoint.')
 param decoySpObjectIds array = []
 
-@description('Object IDs that must NEVER be disabled (real break-glass GA, the activity agent).')
+@description('Object IDs that must NEVER be disabled (break-glass Global Admins, every current Global Administrator, the activity agent).')
 param allowlistObjectIds array = []
 
-@description('Honeypot spoke resource group ID — only resources under this scope may be isolated.')
+@description('Honeypot spoke resource group ID; only resources under this scope may be isolated.')
 param honeypotResourceGroupId string
-
-@description('Dry-run for BOTH playbooks. Keep true for the initial soak; set false to enforce.')
-param dryRun bool = true
 
 @description('Tags for the playbook RG resources. Production-plausible (NOT the internal-mgmt marker): these resources sit in the production-looking playbook RG and their managed identities are directory-visible, so honeypot ownership is tracked in the inventory, not in tags/names.')
 param tags object = {
@@ -59,7 +53,6 @@ module disableUser 'modules/response/playbookDisableUser.bicep' = {
     decoyObjectIds: decoyObjectIds
     decoySpObjectIds: decoySpObjectIds
     allowlistObjectIds: allowlistObjectIds
-    dryRun: dryRun
   }
 }
 
@@ -71,15 +64,13 @@ module isolateResource 'modules/response/playbookIsolateResource.bicep' = {
     tags: tags
     sentinelConnectionId: sentinelConnection.outputs.id
     honeypotResourceGroupId: honeypotResourceGroupId
-    dryRun: dryRun
   }
 }
 
-// Automation rules are child resources of the Sentinel workspace, so they are created cross-scope
-// in the management RG (where the workspace lives), not in this playbook RG.
+// Automation rules are child resources of the Sentinel workspace, which now lives in THIS resource
+// group, so they are created in-scope (no cross-scope hop).
 module ruleDisableUser 'modules/response/automationRule.bicep' = {
   name: 'ar-disable-user'
-  scope: resourceGroup(mgmtResourceGroupName)
   params: {
     workspaceName: workspaceName
     automationRuleId: guid(workspaceName, 'ar-disable-user')
@@ -91,7 +82,6 @@ module ruleDisableUser 'modules/response/automationRule.bicep' = {
 
 module ruleIsolateResource 'modules/response/automationRule.bicep' = {
   name: 'ar-isolate-resource'
-  scope: resourceGroup(mgmtResourceGroupName)
   params: {
     workspaceName: workspaceName
     automationRuleId: guid(workspaceName, 'ar-isolate-resource')
@@ -101,8 +91,8 @@ module ruleIsolateResource 'modules/response/automationRule.bicep' = {
   }
 }
 
-@description('Disable-user playbook managed identity — grant it Graph User.EnableDisableAccount + User.ReadWrite.All.')
+@description('Disable-user playbook managed identity, grant it Graph User.EnableDisableAccount + User.ReadWrite.All.')
 output disableUserPrincipalId string = disableUser.outputs.principalId
 
-@description('Isolate-resource playbook managed identity — grant it a role with Microsoft.Authorization/locks/write on the honeypot RG.')
+@description('Isolate-resource playbook managed identity, grant it a role with Microsoft.Authorization/locks/write on the honeypot RG.')
 output isolateResourcePrincipalId string = isolateResource.outputs.principalId

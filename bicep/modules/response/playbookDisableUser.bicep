@@ -1,4 +1,4 @@
-metadata description = 'SOAR playbook: on a Microsoft Sentinel incident, disable the offending decoy account (user OR service principal) and revoke its sessions via Microsoft Graph (managed identity). SAFETY: an account is actioned ONLY if it is in the decoy inventory AND not allowlisted AND dryRun is false; every other path only comments. This guarantees remediation never actions a real account.'
+metadata description = 'SOAR playbook: on a Microsoft Sentinel incident, disable the offending decoy account (user or service principal) and revoke its sessions via Microsoft Graph (managed identity). An account is actioned only if it is in the decoy inventory and not allowlisted; every other path only comments. This guarantees remediation never actions a real account.'
 
 @description('Logic App (playbook) name.')
 param name string
@@ -9,17 +9,14 @@ param location string
 @description('Resource ID of the azuresentinel API connection.')
 param sentinelConnectionId string
 
-@description('SAFETY KEY 1 — the decoy identities this playbook is ALLOWED to disable (lure, personas, canary identities, from inventory.identity). An account is actioned ONLY if it is in this list. Anything not here (a real admin who fat-fingered into the trap, an attacker-controlled real account) is never disabled.')
+@description('SAFETY KEY 1, the decoy identities this playbook is ALLOWED to disable (the emergency-access decoy, from inventory.identity). An account is actioned only if it is in this list. Anything not here (a real admin, an attacker-controlled real account) is never disabled.')
 param decoyObjectIds array = []
 
 @description('Decoy SERVICE PRINCIPAL object IDs this playbook may disable (the reachable decoy SP, from inventory.identity.reachableApp.spObjectId). Disabling an SP uses the /servicePrincipals Graph endpoint, not /users.')
 param decoySpObjectIds array = []
 
-@description('SAFETY KEY 2 — object IDs that must NEVER be disabled even if somehow present in the decoy list (real break-glass GA, the activity agent).')
+@description('SAFETY KEY 2, object IDs that must NEVER be disabled even if somehow present in the decoy list (break-glass Global Admins, every current Global Administrator, the activity agent).')
 param allowlistObjectIds array = []
-
-@description('Dry-run: when true the playbook only comments and makes no change. Recommended for the initial soak period.')
-param dryRun bool = true
 
 @description('Resource tags.')
 param tags object = {}
@@ -57,9 +54,6 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
       decoySpObjectIds: {
         value: decoySpObjectIds
       }
-      dryRun: {
-        value: dryRun
-      }
     }
     definition: {
       '$schema': 'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#'
@@ -79,10 +73,6 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
         decoySpObjectIds: {
           type: 'Array'
           defaultValue: []
-        }
-        dryRun: {
-          type: 'Bool'
-          defaultValue: true
         }
       }
       triggers: {
@@ -138,7 +128,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                     ]
                   }
                   actions: {
-                    Guard_allowlist_and_dryrun: {
+                    Guard_not_allowlisted: {
                       type: 'If'
                       expression: {
                         and: [
@@ -149,12 +139,6 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                                 '@items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']'
                               ]
                             }
-                          }
-                          {
-                            equals: [
-                              '@parameters(\'dryRun\')'
-                              false
-                            ]
                           }
                         ]
                       }
@@ -217,7 +201,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                             path: '/Incidents/Comment'
                             body: {
                               incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                              message: 'Honeypot SOAR: disabled DECOY @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} (@{if(contains(parameters(\'decoySpObjectIds\'), items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']), \'service principal\', \'user — sessions revoked\')}).'
+                              message: 'Honeypot SOAR: disabled DECOY @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} (@{if(contains(parameters(\'decoySpObjectIds\'), items(\'For_each_account\')?[\'properties\']?[\'aadUserId\']), \'service principal\', \'user, sessions revoked\')}).'
                             }
                           }
                         }
@@ -236,7 +220,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                               path: '/Incidents/Comment'
                               body: {
                                 incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                                message: 'Honeypot SOAR: @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} is a decoy but was NOT disabled (allowlisted break-glass/agent, or dry-run mode).'
+                                message: 'Honeypot SOAR: @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} is a decoy but was NOT disabled (allowlisted break-glass/admin/agent).'
                               }
                             }
                           }
@@ -258,7 +242,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                           path: '/Incidents/Comment'
                           body: {
                             incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                            message: 'Honeypot SOAR: NO action on @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']} — NOT a decoy identity. Real accounts are never disabled by this playbook.'
+                            message: 'Honeypot SOAR: NO action on @{items(\'For_each_account\')?[\'properties\']?[\'friendlyName\']}, NOT a decoy identity. Real accounts are never disabled by this playbook.'
                           }
                         }
                       }

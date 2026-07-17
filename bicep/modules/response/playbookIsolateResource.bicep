@@ -1,4 +1,4 @@
-metadata description = 'SOAR playbook: on a Microsoft Sentinel incident involving a honeypot resource, apply a CanNotDelete/ReadOnly lock to the offending resource for evidence preservation and isolation, then comment on the incident. SAFETY: only acts on resource IDs that sit under the configured honeypot resource group prefix; anything else is skipped.'
+metadata description = 'SOAR playbook: on a Microsoft Sentinel incident involving a honeypot resource, apply a ReadOnly lock to the offending resource for evidence preservation and isolation, then comment on the incident. Only acts on resource IDs that sit under the configured honeypot resource group prefix; anything else is skipped.'
 
 @description('Logic App (playbook) name.')
 param name string
@@ -11,9 +11,6 @@ param sentinelConnectionId string
 
 @description('Honeypot resource group ID prefix. Only resources under this scope are isolated.')
 param honeypotResourceGroupId string
-
-@description('Dry-run: when true the playbook only comments and applies no lock.')
-param dryRun bool = true
 
 @description('Resource tags.')
 param tags object = {}
@@ -45,9 +42,6 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
       honeypotResourceGroupId: {
         value: honeypotResourceGroupId
       }
-      dryRun: {
-        value: dryRun
-      }
     }
     definition: {
       '$schema': 'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#'
@@ -59,10 +53,6 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
         honeypotResourceGroupId: {
           type: 'String'
           defaultValue: ''
-        }
-        dryRun: {
-          type: 'Bool'
-          defaultValue: true
         }
       }
       triggers: {
@@ -105,76 +95,41 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                 ]
               }
               actions: {
-                Guard_dryrun: {
-                  type: 'If'
-                  expression: {
-                    and: [
-                      {
-                        equals: [
-                          '@parameters(\'dryRun\')'
-                          false
-                        ]
-                      }
-                    ]
-                  }
-                  actions: {
-                    Apply_lock: {
-                      type: 'Http'
-                      inputs: {
-                        method: 'PUT'
-                        #disable-next-line no-hardcoded-env-urls
-                        uri: 'https://management.azure.com@{items(\'For_each_resource\')?[\'properties\']?[\'resourceId\']}/providers/Microsoft.Authorization/locks/honeypot-isolation?api-version=2020-05-01'
-                        body: {
-                          properties: {
-                            level: 'ReadOnly'
-                            notes: 'Isolated by honeypot SOAR for evidence preservation.'
-                          }
-                        }
-                        authentication: {
-                          type: 'ManagedServiceIdentity'
-                          #disable-next-line no-hardcoded-env-urls
-                          audience: 'https://management.azure.com'
-                        }
+                Apply_lock: {
+                  type: 'Http'
+                  inputs: {
+                    method: 'PUT'
+                    #disable-next-line no-hardcoded-env-urls
+                    uri: 'https://management.azure.com@{items(\'For_each_resource\')?[\'properties\']?[\'resourceId\']}/providers/Microsoft.Authorization/locks/honeypot-isolation?api-version=2020-05-01'
+                    body: {
+                      properties: {
+                        level: 'ReadOnly'
+                        notes: 'Isolated by honeypot SOAR for evidence preservation.'
                       }
                     }
-                    Comment_isolated: {
-                      type: 'ApiConnection'
-                      runAfter: {
-                        Apply_lock: ['Succeeded']
-                      }
-                      inputs: {
-                        host: {
-                          connection: {
-                            name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
-                          }
-                        }
-                        method: 'post'
-                        path: '/Incidents/Comment'
-                        body: {
-                          incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                          message: 'Honeypot SOAR: applied ReadOnly isolation lock to honeypot resource @{items(\'For_each_resource\')?[\'properties\']?[\'resourceId\']}.'
-                        }
-                      }
+                    authentication: {
+                      type: 'ManagedServiceIdentity'
+                      #disable-next-line no-hardcoded-env-urls
+                      audience: 'https://management.azure.com'
                     }
                   }
-                  else: {
-                    actions: {
-                      Comment_would_isolate: {
-                        type: 'ApiConnection'
-                        inputs: {
-                          host: {
-                            connection: {
-                              name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
-                            }
-                          }
-                          method: 'post'
-                          path: '/Incidents/Comment'
-                          body: {
-                            incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                            message: 'Honeypot SOAR: WOULD isolate honeypot resource @{items(\'For_each_resource\')?[\'properties\']?[\'resourceId\']} (dry-run mode — no lock applied).'
-                          }
-                        }
+                }
+                Comment_isolated: {
+                  type: 'ApiConnection'
+                  runAfter: {
+                    Apply_lock: ['Succeeded']
+                  }
+                  inputs: {
+                    host: {
+                      connection: {
+                        name: '@parameters(\'$connections\')[\'azuresentinel\'][\'connectionId\']'
                       }
+                    }
+                    method: 'post'
+                    path: '/Incidents/Comment'
+                    body: {
+                      incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
+                      message: 'Honeypot SOAR: applied ReadOnly isolation lock to honeypot resource @{items(\'For_each_resource\')?[\'properties\']?[\'resourceId\']}.'
                     }
                   }
                 }
@@ -193,7 +148,7 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
                       path: '/Incidents/Comment'
                       body: {
                         incidentArmId: '@triggerBody()?[\'object\']?[\'id\']'
-                        message: 'Honeypot SOAR: NO isolation action on @{coalesce(items(\'For_each_resource\')?[\'properties\']?[\'resourceId\'], \'(non-resource entity)\')} — NOT under the honeypot resource group. Real resources are never locked by this playbook.'
+                        message: 'Honeypot SOAR: NO isolation action on @{coalesce(items(\'For_each_resource\')?[\'properties\']?[\'resourceId\'], \'(non-resource entity)\')}, NOT under the honeypot resource group. Real resources are never locked by this playbook.'
                       }
                     }
                   }
