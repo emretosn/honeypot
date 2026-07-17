@@ -1,4 +1,4 @@
-metadata description = 'Decoy Linux VM for the honeypot spoke. Slightly-inviting SSH surface (reachable via the spoke NSG, no public IP — reached through the spoke). cloud-init plants fake-prod breadcrumbs so an attacker who lands on it finds an enticing but dead-end path. Boot diagnostics and the AMA-ready identity allow log collection.'
+metadata description = 'Decoy Linux VM for the honeypot spoke. Slightly-inviting SSH surface (reachable via the spoke NSG, no public IP, reached through the spoke). cloud-init plants fake-prod breadcrumbs so an attacker who lands on it finds an enticing but dead-end path. Boot diagnostics and the AMA-ready identity allow log collection.'
 
 @description('VM name (decoy-plane: production-like, no honeypot marker).')
 param name string

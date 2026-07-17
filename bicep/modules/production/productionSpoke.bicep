@@ -1,4 +1,4 @@
-metadata description = 'Representative PRODUCTION spoke — a lightweight but REAL (non-decoy) workload that simulates the customer existing environment, so the honeypot can be demonstrated deploying alongside genuine production. Contains a VNet + NSG + a storage account that looks like an ordinary line-of-business workload. It is NOT a honeypot: no breadcrumbs, no decoy diagnostics-for-detection, no tripwires. Its address space is what the honeypot spoke denies egress toward. Built only by the production-simulation stage.'
+metadata description = 'Representative PRODUCTION spoke, a lightweight but REAL (non-decoy) workload that simulates the customer existing environment, so the honeypot can be demonstrated deploying alongside genuine production. Contains a VNet + NSG + a storage account that looks like an ordinary line-of-business workload. It is NOT a honeypot: no breadcrumbs, no decoy diagnostics-for-detection, no tripwires. Its address space is what the honeypot spoke denies egress toward. Built only by the production-simulation stage.'
 
 @description('Production workload name prefix (production-looking). e.g. "erp-prod".')
 param namePrefix string
@@ -15,13 +15,13 @@ param hubVnetId string
 @description('Globally-unique production storage account name (3-24 lowercase alphanumeric).')
 param storageAccountName string
 
-@description('Resource tags (genuine production tags — this is not a decoy).')
+@description('Resource tags (genuine production tags, this is not a decoy).')
 param tags object = {}
 
 var workloadSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 0)
 
 // Ordinary workload NSG: allow intra-VNet, deny direct inbound from the internet. Nothing
-// special — this is meant to look like a normal production subnet.
+// special, this is meant to look like a normal production subnet.
 module workloadNsg '../network/nsg.bicep' = {
   name: '${namePrefix}-nsg'
   params: {
@@ -86,7 +86,7 @@ module peerToHub '../network/peering.bicep' = if (!empty(hubVnetId)) {
   }
 }
 
-// A plausible production storage account (a real, ordinary workload resource — NOT a decoy).
+// A plausible production storage account (a real, ordinary workload resource, NOT a decoy).
 resource sa 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
   location: location

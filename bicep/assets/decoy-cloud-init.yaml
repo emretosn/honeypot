@@ -1,6 +1,5 @@
 #cloud-config
-# Plants fake-prod breadcrumbs on the decoy VM. NONE of these resolve to anything real;
-# each is a tripwire that advertises a path to "production" the attacker cannot actually take.
+# Base configuration for the core-prod application host.
 write_files:
   - path: /home/sysadmin/.ssh/config
     permissions: '0600'
@@ -9,16 +8,41 @@ write_files:
         HostName jump.core-prod.internal
         User svc-deploy
         IdentityFile ~/.ssh/id_prod
+      Host github.com
+        User git
+        IdentityFile ~/.ssh/id_github
   - path: /opt/app/.env
     permissions: '0640'
     content: |
       # Application configuration (production)
-      DB_CONNECTION="Server=sql-core-prod.database.windows.net;Database=core;User Id=app_rw;Password=Pr0d-DB-DoNotUse-Decoy;"
-      STORAGE_CONNECTION="DefaultEndpointsProtocol=https;AccountName=corebackups;AccountKey=ZmFrZS1kZWNveS1rZXktbm90LXJlYWw=;"
+      DB_CONNECTION="Server=sql-core-prod.database.windows.net;Database=core;User Id=app_rw;Password=mj5K9W3iGj22JzJNlid5;"
+      STORAGE_CONNECTION="DefaultEndpointsProtocol=https;AccountName=corebackups;AccountKey=J1qzkk7bx+g+Ml8bZBXxDnv7KNC7uLosBlx0pTaLP4fWlDm8bsOX5hbMggcM7jKoZpbboUZrdrllUn+OG6I5zQ==;"
       KEYVAULT_URI="https://kv-core-prod.vault.azure.net/"
+      GITHUB_PAT="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"
+  - path: /home/sysadmin/.ssh/id_github
+    permissions: '0600'
+    content: |
+      -----BEGIN OPENSSH PRIVATE KEY-----
+      b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+      EaoX2zz9K8FO8fatsxKNfaR8+nJaxTmNX3OdiXtR3sKo8cb0k3jXKOI8VLarlDeY
+      x3pdfDKnY+6LKBGlrKCeKTAg7v3pBZRaGEgfrsd6bchQFOw0cbYtoDyCbqVtX6cK
+      IG2MidYFxp9sYwdvh5kA7n2zstjEJ7W1YjMpheFgknQnskeOySgZuW/YsC/f/eiR
+      8+YjJf0uw+BYhJivMKZL7KlsquFZ8ti4UG4k6ygcCiG7WicWse7Oc1m+DAQnnyst
+      WorTKEioM5gvQXXsaSiAIacQQz9+Zri9YgcGKTWLzjBdYlC/oM1QaNge925SavvT
+      -----END OPENSSH PRIVATE KEY-----
+  - path: /opt/app/.git/config
+    permissions: '0644'
+    content: |
+      [remote "origin"]
+        url = git@github.com:core-prod-platform/infrastructure.git
+        fetch = +refs/heads/*:refs/remotes/origin/*
+      [user]
+        name = svc-deploy
+        email = svc-deploy@core-prod.internal
   - path: /opt/app/deploy/README.md
     permissions: '0644'
     content: |
       # Deployment runbook
-      Use the identity-admin service account to rotate credentials in Key Vault.
+      Use the svc-deploy service account to rotate credentials in Key Vault.
+      CI/CD pulls infrastructure from GitHub (core-prod-platform/infrastructure) via the deploy key.
       Jump host: prod-jump (see ~/.ssh/config).

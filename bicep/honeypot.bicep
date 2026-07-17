@@ -1,4 +1,4 @@
-metadata description = 'HONEYPOT composition (the product). Deploys the isolated honeypot spoke (decoy Key Vault + storage, optional SSH-lure VM/App Gateway) ALONGSIDE an existing production hub-spoke. The hub is consumed as an INPUT (hubVnetId) — this template never creates a hub or any production resource, so it drops cleanly into a real tenant. Reusable: instantiate against any hub by supplying its VNet ID. Egress to the production address space is denied; the spoke peers to the hub for monitoring only.'
+metadata description = 'HONEYPOT composition (the product). Deploys the isolated honeypot spoke (private decoy VM + decoy Key Vault + storage) ALONGSIDE an existing production hub-spoke. The hub is consumed as an INPUT (hubVnetId), this template never creates a hub or any production resource, so it drops cleanly into a real tenant. Reusable: instantiate against any hub by supplying its VNet ID. Nothing is exposed to the internet; egress to the production address space is denied; the spoke peers to the hub for monitoring only.'
 
 targetScope = 'subscription'
 
@@ -14,7 +14,7 @@ param workspaceId string
 @description('Tenant ID for the decoy Key Vault.')
 param tenantId string = subscription().tenantId
 
-@description('Resource ID of the (production) hub VNet to peer to for monitoring. REQUIRED — this is the existing hub the honeypot deploys alongside.')
+@description('Resource ID of the (production) hub VNet to peer to for monitoring. REQUIRED, this is the existing hub the honeypot deploys alongside.')
 param hubVnetId string
 
 @description('Production address space(s) the honeypot must NOT reach (egress deny / containment).')
@@ -26,12 +26,9 @@ param spokeNamePrefix string = 'core-prod'
 @description('Decoy spoke VNet address space.')
 param spokeAddressPrefix string = '10.20.0.0/16'
 
-@description('Include the decoy VM (SSH lure) + the App Gateway that fronts it. Off by default: the spoke exposes only the decoy Key Vault + storage, needs no SSH key, and skips the slow App Gateway provision.')
-param includeDecoyVm bool = false
-
-@description('SSH public key for the decoy VM admin user. Required only when includeDecoyVm is true.')
+@description('SSH public key for the decoy VM admin user.')
 @secure()
-param decoyVmSshPublicKey string = ''
+param decoyVmSshPublicKey string
 
 @description('Base64 cloud-init planting fake-prod breadcrumbs on the decoy VM.')
 param decoyVmCustomDataBase64 string = ''
@@ -41,13 +38,6 @@ param keyVaultName string
 
 @description('Globally-unique decoy storage account name (3-24 lowercase alphanumeric, production-looking).')
 param storageAccountName string
-
-@description('Lure-credential honeytoken secret name (empty disables). Threaded to the spoke KV.')
-param lureSecretName string = ''
-
-@description('Lure-credential honeytoken value (UPN + password). Threaded from the identity output via network.sh; empty disables.')
-@secure()
-param lureSecretValue string = ''
 
 @description('Decoy-plane tags. Honeypot ownership lives here, NOT in names.')
 param decoyTags object = {
@@ -81,13 +71,10 @@ module spoke 'modules/spoke/honeypotSpoke.bicep' = {
     hubVnetId: hubVnetId
     workspaceId: workspaceId
     tenantId: tenantId
-    includeDecoyVm: includeDecoyVm
     decoyVmSshPublicKey: decoyVmSshPublicKey
     decoyVmCustomDataBase64: decoyVmCustomDataBase64
     keyVaultName: keyVaultName
     storageAccountName: storageAccountName
-    lureSecretName: lureSecretName
-    lureSecretValue: lureSecretValue
   }
 }
 
@@ -103,10 +90,7 @@ output hubVnetId string = hubVnetId
 @description('Decoy spoke VNet resource ID.')
 output honeypotVnetId string = spoke.outputs.vnetId
 
-@description('Internet-facing decoy App Gateway public IP (empty when the VM lure is disabled).')
-output appGatewayPublicIp string = spoke.outputs.appGatewayPublicIp
-
-@description('Decoy VM resource ID (empty when the VM lure is disabled).')
+@description('Decoy VM resource ID.')
 output decoyVmId string = spoke.outputs.decoyVmId
 
 @description('Decoy Key Vault resource ID.')

@@ -15,14 +15,7 @@ param workspaceId string
 @description('Resource tags.')
 param tags object = {}
 
-@description('Name of the lure-credential honeytoken secret (e.g. "identity-admin-credentials"). Empty disables it. When set, the lure UPN + password are planted so recon (a KV secret read) LEADS to the lure: a sign-in attempt as the lure then trips the lure sign-in rule. MFA still blocks actual access — the attempt is the signal.')
-param lureSecretName string = ''
-
-@description('Value of the lure-credential honeytoken (UPN + password breadcrumb). Threaded from the identity Terraform output via network.sh; never written to the inventory. Empty disables it.')
-@secure()
-param lureSecretValue string = ''
-
-@description('Honeytoken secrets to plant in the decoy vault — name/value pairs. These are inert canaries (never real). Reading any of them is a tripwire (the decoy-kv-read rule). Default plants a couple of credential-shaped breadcrumbs.')
+@description('Honeytoken secrets to plant in the decoy vault, name/value pairs. These are inert canaries (never real). Reading any of them is a tripwire (the decoy-kv-read rule). They are the "valuable assets" an internal attacker who takes over the reachable SP (Key Vault Secrets User) finds in the vault.')
 param honeytokenSecrets array = [
   {
     name: 'core-prod-sql-connection'
@@ -32,6 +25,12 @@ param honeytokenSecrets array = [
   {
     name: 'svc-deploy-credentials'
     value: 'svc-deploy@core-prod / Depl0y-Core-2026!'
+  }
+  {
+    name: 'github-actions-pat'
+    // Inert decoy GitHub personal access token (fine-grained shape). Never real, reading it is the
+    // tripwire. Looks like a CI/CD deploy token for the core-prod org.
+    value: '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'
   }
 ]
 
@@ -77,7 +76,7 @@ resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
 }
 
 // Plant the honeytoken secrets via the CONTROL plane (Microsoft.KeyVault/vaults/secrets), which
-// works with the deployer's Contributor rights even on an RBAC-authorized vault — no data-plane
+// works with the deployer's Contributor rights even on an RBAC-authorized vault, no data-plane
 // role needed at deploy time. Values are inert canaries; reading any one is a tripwire.
 resource secrets 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
   for s in honeytokenSecrets: {
@@ -88,17 +87,6 @@ resource secrets 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
     }
   }
 ]
-
-// Lure-credential honeytoken — planted only when supplied (identity stage has run and network.sh
-// threaded the value). Same control-plane planting as above. Connects the recon path to the lure:
-// reading this trips the KV-read rule, and trying the creds trips the lure sign-in rule.
-resource lureSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(lureSecretName) && !empty(lureSecretValue)) {
-  parent: vault
-  name: lureSecretName
-  properties: {
-    value: lureSecretValue
-  }
-}
 
 output id string = vault.id
 output name string = vault.name

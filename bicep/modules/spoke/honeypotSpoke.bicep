@@ -1,4 +1,4 @@
-metadata description = 'Honeypot spoke — the isolated, production-looking decoy network. Ingress to the decoy surface is allowed; egress to production address space is DENIED (containment). Contains an Application Gateway fronting a decoy app, a decoy VM with controlled SSH and planted breadcrumbs, a decoy Key Vault and storage account. Peers to the hub for monitoring only; never to the production spoke.'
+metadata description = 'Honeypot spoke, the isolated, production-looking decoy network. NOTHING is exposed to the internet (this is an internal-attacker honeypot): the spoke holds a private decoy VM, a decoy Key Vault and a decoy storage account, reachable to an internal attacker only via the taken-over reachable SP (Owner of the decoy RG). Egress to production is DENIED (containment). Peers to the hub for monitoring only; never to the production spoke.'
 
 @description('Resource name prefix for the spoke. Decoy-plane: production-like, NO honeypot marker. e.g. "core-prod".')
 param namePrefix string
@@ -21,12 +21,9 @@ param workspaceId string
 @description('Tenant ID (for Key Vault).')
 param tenantId string
 
-@description('Include the decoy VM (an SSH lure) and the Application Gateway that fronts it. Off by default: the spoke then exposes only the decoy Key Vault + storage (the resource tripwires detection watches), needs no SSH key, and skips the slow App Gateway provision. Turn on for a more "published workload" look.')
-param includeDecoyVm bool = false
-
-@description('SSH public key for the decoy VM admin user. Required only when includeDecoyVm is true.')
+@description('SSH public key for the decoy VM admin user.')
 @secure()
-param decoyVmSshPublicKey string = ''
+param decoyVmSshPublicKey string
 
 @description('Base64 cloud-init planting fake-prod breadcrumbs on the decoy VM.')
 param decoyVmCustomDataBase64 string = ''
@@ -37,21 +34,15 @@ param keyVaultName string
 @description('Globally-unique decoy storage account name (3-24 lowercase alphanumeric).')
 param storageAccountName string
 
-@description('Lure-credential honeytoken secret name (empty disables). Threaded to the KV module.')
-param lureSecretName string = ''
-
-@description('Lure-credential honeytoken value (UPN + password). Threaded from the identity output via network.sh; empty disables.')
-@secure()
-param lureSecretValue string = ''
-
 @description('Resource tags. Honeypot ownership lives in a tag the decoy-scoped identity cannot read, never in names.')
 param tags object = {}
 
-var appGwSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 0)
-var workloadSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 1)
+var workloadSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 0)
 
-// NSG for the workload subnet: allow ingress from the App Gateway subnet and SSH; deny
-// egress to production; allow egress to internet for realism (sinkhole later if desired).
+// NSG for the workload subnet: allow SSH only from within the VNet (internal admin/monitoring
+// realism, never from the internet, there is no public ingress), and DENY egress to production
+// (containment). The decoy VM is reachable to an internal attacker only via the taken-over SP
+// (Owner of the decoy RG -> run-command), which is exactly what the VM run-command rule detects.
 module workloadNsg '../network/nsg.bicep' = {
   name: '${namePrefix}-workload-nsg'
   params: {
@@ -59,19 +50,6 @@ module workloadNsg '../network/nsg.bicep' = {
     location: location
     tags: tags
     securityRules: [
-      {
-        name: 'Allow-AppGw-Inbound'
-        properties: {
-          priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourceAddressPrefix: appGwSubnetPrefix
-          sourcePortRange: '*'
-          destinationAddressPrefix: workloadSubnetPrefix
-          destinationPortRanges: ['80', '22']
-        }
-      }
       {
         name: 'Allow-VNet-SSH-Inbound'
         properties: {
@@ -102,68 +80,15 @@ module workloadNsg '../network/nsg.bicep' = {
   }
 }
 
-// App Gateway subnet NSG: allow internet HTTP in + the GatewayManager ports App Gateway v2 requires.
-// Deployed only with the decoy VM/App Gateway — otherwise the appgw subnet is never created, so
-// there is nothing for this NSG to guard.
-// NOTE: this subnet holds ONLY the managed App Gateway (a PaaS resource, not attacker-controlled
-// compute), so it intentionally carries NO custom outbound rules. App Gateway v2 preflight rejects
-// the presence of ANY custom outbound Deny on its subnet ("outbound Internet connectivity can't be
-// blocked"; custom outbound denies need the private-deployment/enhanced-network-control feature).
-// Production-egress containment is enforced where it matters — the workload subnet (the decoy VM,
-// the only attacker foothold) keeps its own Deny-Egress-To-Production rule.
-module appGwNsg '../network/nsg.bicep' = if (includeDecoyVm) {
-  name: '${namePrefix}-appgw-nsg'
-  params: {
-    name: '${namePrefix}-appgw-nsg'
-    location: location
-    tags: tags
-    securityRules: [
-      {
-        name: 'Allow-Internet-HTTP-Inbound'
-        properties: {
-          priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourceAddressPrefix: 'Internet'
-          sourcePortRange: '*'
-          destinationAddressPrefix: appGwSubnetPrefix
-          destinationPortRange: '80'
-        }
-      }
-      {
-        name: 'Allow-GatewayManager-Inbound'
-        properties: {
-          priority: 110
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: 'Tcp'
-          sourceAddressPrefix: 'GatewayManager'
-          sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          destinationPortRange: '65200-65535'
-        }
-      }
-    ]
-  }
-}
-
-// The appgw subnet exists only to host the App Gateway, so it is created only with the decoy VM.
-// The workload subnet is always present (hosts the decoy VM when enabled; otherwise stays empty).
-var appGwSubnet = includeDecoyVm ? [
-  {
-    name: 'appgw-subnet'
-    prefix: appGwSubnetPrefix
-    nsgId: appGwNsg!.outputs.id
-  }
-] : []
-var spokeSubnets = concat(appGwSubnet, [
+// Single workload subnet (hosts the decoy VM when enabled; otherwise stays empty). No App Gateway
+// subnet: the spoke exposes NOTHING to the internet, this is an internal-attacker honeypot.
+var spokeSubnets = [
   {
     name: 'workload-subnet'
     prefix: workloadSubnetPrefix
     nsgId: workloadNsg.outputs.id
   }
-])
+]
 
 module vnet '../network/vnet.bicep' = {
   name: '${namePrefix}-vnet'
@@ -186,7 +111,8 @@ module peerToHub '../network/peering.bicep' = if (!empty(hubVnetId)) {
   }
 }
 
-module decoyVm '../spoke/decoyVm.bicep' = if (includeDecoyVm) {
+// Private decoy VM (no public IP). Reachable to an internal attacker only via the SP takeover chain.
+module decoyVm '../spoke/decoyVm.bicep' = {
   name: '${namePrefix}-decoy-vm'
   params: {
     name: '${namePrefix}-app01'
@@ -198,19 +124,6 @@ module decoyVm '../spoke/decoyVm.bicep' = if (includeDecoyVm) {
   }
 }
 
-// App Gateway exists only to front the decoy VM, so it is deployed only when the VM is.
-module appGw '../spoke/appGateway.bicep' = if (includeDecoyVm) {
-  name: '${namePrefix}-appgw'
-  params: {
-    name: '${namePrefix}-appgw'
-    location: location
-    tags: tags
-    subnetId: vnet.outputs.subnetIds['appgw-subnet']
-    backendIp: decoyVm!.outputs.privateIp
-    workspaceId: workspaceId
-  }
-}
-
 module keyVault '../spoke/keyVault.bicep' = {
   name: '${namePrefix}-kv'
   params: {
@@ -219,8 +132,6 @@ module keyVault '../spoke/keyVault.bicep' = {
     tags: tags
     tenantId: tenantId
     workspaceId: workspaceId
-    lureSecretName: lureSecretName
-    lureSecretValue: lureSecretValue
   }
 }
 
@@ -236,8 +147,6 @@ module storage '../spoke/storage.bicep' = {
 
 output vnetId string = vnet.outputs.id
 output vnetName string = vnet.outputs.name
-output includeDecoyVm bool = includeDecoyVm
-output appGatewayPublicIp string = includeDecoyVm ? appGw!.outputs.publicIp : ''
-output decoyVmId string = includeDecoyVm ? decoyVm!.outputs.id : ''
+output decoyVmId string = decoyVm.outputs.id
 output keyVaultId string = keyVault.outputs.id
 output storageAccountId string = storage.outputs.id
