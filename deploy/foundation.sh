@@ -15,4 +15,4 @@ az deployment sub create \
   -o none
 ok "foundation deployed (RG=$MGMT_RG, workspace=$WORKSPACE)"
 
-echo "  Verify: ./tests/verify_foundation.sh $ENVN $REGION_CODE $MARKER"
+echo "  Verify: ./tests/verify_foundation.sh $ENVN $REGION_CODE"
