@@ -10,10 +10,9 @@ cd "$ROOT"
 MODE="${1:-static}"            # static | tenant
 ENVN="${2:-dev}"
 REGION_CODE="${3:-weu}"
-MARKER="${4:-hp}"
-SPOKE_RG="${5:-rg-core-prod-weu}"
-WORKSPACE="${6:-log-${MARKER}-${ENVN}-${REGION_CODE}}"
-MGMT_RG="rg-${MARKER}-${ENVN}-${REGION_CODE}-mgmt"
+SPOKE_RG="${4:-rg-core-prod-weu}"
+WORKSPACE="${5:-log-core-ops-${REGION_CODE}}"
+MGMT_RG="rg-core-ops-${REGION_CODE}"
 
 green() { echo "  [OK]   $1"; }
 red()   { echo "  [FAIL] $1"; }
@@ -28,7 +27,6 @@ run() {
 
 section "Static validation (IaC builds)"
 run "bicep: foundation" az bicep build-params --file bicep/parameters/foundation.dev.bicepparam --stdout
-run "bicep: honeypot"   az bicep build-params --file bicep/parameters/honeypot.dev.bicepparam --stdout
 run "bicep: network (orchestrator)" az bicep build-params --file bicep/parameters/network.dev.bicepparam --stdout
 run "bicep: detection"  az bicep build-params --file bicep/parameters/detection.dev.bicepparam --stdout
 run "bicep: response"   az bicep build-params --file bicep/parameters/response.dev.bicepparam --stdout
@@ -38,11 +36,11 @@ run "shell: verify scripts parse" bash -c 'for s in tests/verify_*.sh tests/sync
 
 if [ "$MODE" = "tenant" ]; then
   section "Against-tenant verification (deployed resources)"
-  run "foundation" ./tests/verify_foundation.sh "$ENVN" "$REGION_CODE" "$MARKER"
+  run "foundation" ./tests/verify_foundation.sh "$REGION_CODE"
   run "identity"   ./tests/verify_identity.sh
   run "network"    ./tests/verify_network.sh "$SPOKE_RG"
   run "detection"  ./tests/verify_detection.sh "$MGMT_RG" "$WORKSPACE"
-  run "response"   ./tests/verify_response.sh "$MGMT_RG" "$WORKSPACE" "${MARKER}-${ENVN}-${REGION_CODE}"
+  run "response"   ./tests/verify_response.sh "$MGMT_RG" "$WORKSPACE" "$MGMT_RG" "$REGION_CODE"
 fi
 
 echo

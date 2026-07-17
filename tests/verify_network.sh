@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Honeypot network verification — run AFTER deploying bicep/network.bicep.
+# Honeypot network verification, run AFTER deploying bicep/network.bicep.
 # Asserts the spoke EXISTS and, critically, that it is CONTAINED:
 #   - the honeypot spoke VNet and decoy resources exist,
 #   - an explicit NSG rule DENIES egress to the production address space,
@@ -27,7 +27,7 @@ DENY=$(az network nsg list -g "$SPOKE_RG" -o json 2>/dev/null | jq -r --arg p "$
     | select(.direction=="Outbound" and .access=="Deny")
     | select((.destinationAddressPrefixes // [.destinationAddressPrefix]) | index($p)) ] | length')
 [ "${DENY:-0}" -ge 1 ] && pass "egress-to-production DENY rule present on $DENY NSG(s)" \
-  || fail "no NSG denies egress to production ($PROD_PREFIX) — containment broken!"
+  || fail "no NSG denies egress to production ($PROD_PREFIX), containment broken!"
 
 # No spoke-to-spoke peering (only hub peering allowed).
 PEERINGS=$(az network vnet peering list -g "$SPOKE_RG" --vnet-name "$VNET" --query '[].name' -o tsv 2>/dev/null || true)
@@ -38,12 +38,9 @@ echo "$PEERINGS" | grep -iqE 'spoke|prod-spoke|workload-spoke' \
 # Decoy resources exist.
 az keyvault list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q . && pass "decoy Key Vault exists" || fail "decoy Key Vault missing"
 az storage account list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q . && pass "decoy storage account exists" || fail "decoy storage missing"
-# Decoy VM is OPTIONAL (includeDecoyVm). Report presence, do not require it.
-if az vm list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q .; then
-  pass "decoy VM present (SSH lure enabled)"
-else
-  echo "  [skip] decoy VM not deployed (includeDecoyVm=false) — KV/storage are the resource tripwires"
-fi
+# Decoy VM (private workload host), always deployed.
+az vm list -g "$SPOKE_RG" --query '[0].name' -o tsv 2>/dev/null | grep -q . \
+  && pass "decoy VM present (private workload host)" || fail "decoy VM missing"
 
 # OPSEC: no honeypot marker in attacker-visible resource names.
 NAMES=$(az resource list -g "$SPOKE_RG" --query '[].name' -o tsv 2>/dev/null)

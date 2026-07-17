@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# Foundation verification — run AFTER deploying bicep/foundation.bicep against your subscription.
+# Foundation verification, run AFTER deploying bicep/foundation.bicep against your subscription.
 # Confirms the management RG and Log Analytics workspace exist and are configured.
 # Requires: az login with the target subscription selected.
 set -euo pipefail
 
-ENV="${1:-dev}"
-REGION_CODE="${2:-weu}"
-MARKER="${3:-hp}"
+REGION_CODE="${1:-weu}"
 
-RG="rg-${MARKER}-${ENV}-${REGION_CODE}-mgmt"
-LAW="log-${MARKER}-${ENV}-${REGION_CODE}"
+RG="rg-core-ops-${REGION_CODE}"
+LAW="log-core-ops-${REGION_CODE}"
 
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
@@ -28,5 +26,5 @@ RETENTION=$(echo "$WS_JSON" | jq -r '.retentionInDays')
 CAP=$(echo "$WS_JSON" | jq -r '.workspaceCapping.dailyQuotaGb')
 pass "daily ingestion cap = ${CAP} GB"
 
-# OPSEC guard: the management plane may carry the marker, but decoy resources must not (none exist yet at this stage).
+# OPSEC guard: the management/operations plane is production-plausible (no marker in any name).
 echo "== Foundation OK =="

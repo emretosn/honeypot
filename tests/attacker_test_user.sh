@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Throwaway ATTACKER TEST identity for honeypot validation. Creates a plain, non-privileged
-# member user with NO roles, NOT in the decoy AU, and NOT in any allowlist — i.e. exactly
+# member user with NO roles, NOT in the decoy AU, and NOT in any allowlist, i.e. exactly
 # what an attacker's foothold looks like. Use it to enumerate (AzureHound) and to be the
 # non-allowlisted actor in detection tests. DELETE it when done.
 #
@@ -17,10 +17,10 @@ die() { echo "ERROR: $1" >&2; exit 1; }
 
 az account show >/dev/null 2>&1 || die "run 'az login' first."
 
-# Derive the verified domain from the lure UPN in the inventory.
-LURE_UPN=$(jq -r '.identity.lure.upn' "$INV" 2>/dev/null)
-[ -n "$LURE_UPN" ] && [ "$LURE_UPN" != "null" ] || die "lure UPN not found in $INV (run tests/sync_inventory.sh)."
-DOMAIN="${LURE_UPN#*@}"
+# Derive the verified domain from the emergency-access decoy UPN in the inventory.
+DECOY_UPN=$(jq -r '.identity.emergencyAccess.upn' "$INV" 2>/dev/null)
+[ -n "$DECOY_UPN" ] && [ "$DECOY_UPN" != "null" ] || die "emergency-access UPN not found in $INV (run tests/sync_inventory.sh)."
+DOMAIN="${DECOY_UPN#*@}"
 UPN="attacker-test@${DOMAIN}"
 
 case "$ACTION" in

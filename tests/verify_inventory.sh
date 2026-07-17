@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Module-contract check for inventory/decoy-inventory.json — the single source of truth that
+# Module-contract check for inventory/decoy-inventory.json, the single source of truth that
 # producers (identity/spoke/canary) WRITE and consumers (detection/response/cleanup) READ.
 # This is a STATIC check (no tenant needed): it validates structure, schema, referential
 # integrity and OPSEC, so the "docs ahead of IaC" / silent-misconfig failure modes cannot ship.
@@ -39,16 +39,10 @@ if [ "$sv" = "$EXPECTED_SCHEMA" ]; then ok "schemaVersion=$sv"; else bad "schema
 # 3. Required keys must EXIST (presence is the contract; values may be filled post-deploy).
 required_keys=(
   '.tenantId'
-  '.identity.decoyAdministrativeUnitId'
-  '.identity.lure.upn'
-  '.identity.lure.objectId'
-  '.identity.lure.displayName'
-  '.identity.decoyPersonas'
-  '.identity.lureRoleDefinitionId'
-  '.identity.decoyGroupIds'
-  '.identity.decoyAppIds'
   '.identity.reachableApp.appId'
   '.identity.reachableApp.spObjectId'
+  '.identity.emergencyAccess.upn'
+  '.identity.emergencyAccess.objectId'
   '.network.honeypotResourceGroupId'
   '.network.keyVaultId'
   '.network.storageAccountId'
@@ -67,10 +61,10 @@ for a in '.allowlist.breakGlassObjectIds' '.allowlist.agentObjectIds' '.allowlis
 done
 
 # 5. OPSEC: no honeypot marker may leak into any ATTACKER-VISIBLE name field.
-#    (decoy UPNs, display names, group/app names live here; the 'hp'/'honeypot'/'decoy'
-#     markers must NEVER appear in them — they belong only to the internal plane.)
+#    (the reachable app + emergency-access display names/UPNs live here; the
+#     'hp'/'honeypot'/'decoy' markers must NEVER appear in them.)
 visible=$(jq -r '
-  [ .identity.lure.upn, .identity.lure.displayName ]
+  [ .identity.reachableApp.displayName, .identity.emergencyAccess.upn, .identity.emergencyAccess.displayName ]
   | map(select(. != null)) | .[]' "$INV" 2>/dev/null)
 leak=0
 while IFS= read -r v; do
@@ -82,11 +76,11 @@ done <<< "$visible"
 [ "$leak" -eq 0 ] && ok "no OPSEC marker in attacker-visible name fields"
 
 # 6. Referential integrity for downstream consumers: the values detection/response key on
-#    must be coherent. UPN, when populated, must look like a UPN.
-upn=$(jq -r '.identity.lure.upn // ""' "$INV")
+#    must be coherent. The emergency-access UPN, when populated, must look like a UPN.
+upn=$(jq -r '.identity.emergencyAccess.upn // ""' "$INV")
 if [ -n "$upn" ]; then
   printf '%s' "$upn" | grep -qE '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' \
-    && ok "lure.upn is well-formed ($upn)" || bad "lure.upn malformed: '$upn'"
+    && ok "emergencyAccess.upn is well-formed ($upn)" || bad "emergencyAccess.upn malformed: '$upn'"
 fi
 
 # 7. Strict (post-deploy) checks: ids that MUST be populated once identity is applied.
@@ -94,21 +88,22 @@ if [ "$STRICT" -eq 1 ]; then
   echo "  -- strict: post-deploy population --"
   strict_nonempty=(
     '.tenantId'
-    '.identity.decoyAdministrativeUnitId'
-    '.identity.lure.objectId'
-    '.identity.lure.upn'
+    '.identity.reachableApp.appId'
+    '.identity.reachableApp.spObjectId'
+    '.identity.emergencyAccess.objectId'
+    '.identity.emergencyAccess.upn'
   )
   for k in "${strict_nonempty[@]}"; do
     v=$(jq -r "$k // \"\"" "$INV")
     [ -n "$v" ] && ok "populated: $k" || bad "strict: $k is empty (run tests/sync_inventory.sh after apply)"
   done
-  # Break-glass must be set before enforcement; warn (not fail) so dry-run soak can proceed.
+  # Break-glass should be set so it is protected from remediation; warn (not fail) if missing.
   [ "$(jq '.allowlist.breakGlassObjectIds | length' "$INV")" -gt 0 ] \
     && ok "break-glass allowlist populated" \
-    || warn "allowlist.breakGlassObjectIds empty — required before dryRun=false (set break_glass_object_ids)."
+    || warn "allowlist.breakGlassObjectIds empty (set break_glass_object_ids so break-glass is never disabled)."
 else
   # Lenient mode: just inform if core ids are still unpopulated.
-  [ -z "$(jq -r '.identity.lure.objectId // ""' "$INV")" ] && warn "lure.objectId empty (pre-deploy or before sync_inventory) — fine for static checks."
+  [ -z "$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")" ] && warn "reachableApp.spObjectId empty (pre-deploy or before sync_inventory), fine for static checks."
 fi
 
 echo

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Response (SOAR) verification — run AFTER deploying bicep/response.bicep.
-# Confirms both playbooks exist, both default to dry-run, the allowlist guard is wired,
+# Response (SOAR) verification, run AFTER deploying bicep/response.bicep.
+# Confirms both playbooks exist, are enforcing, the two-key allowlist guard is wired,
 # and the Sentinel automation rules that invoke them are present.
 # Requires: az login; jq.
 set -euo pipefail
 
-MGMT_RG="${1:-rg-hp-dev-weu-mgmt}"
-WORKSPACE="${2:-log-hp-dev-weu}"
-PLAYBOOK_RG="${3:-rg-core-ops-weu}"
+MGMT_RG="${1:-rg-core-ops-weu}"
+WORKSPACE="${2:-log-core-ops-weu}"
+PLAYBOOK_RG="${3:-$MGMT_RG}"
 REGION_CODE="${4:-weu}"
 
 pass() { echo "PASS: $1"; }
@@ -39,13 +39,11 @@ for pb in "$DISABLE" "$ISOLATE"; do
   pass "playbook exists: $pb"
   PRINC=$(echo "$J" | jq -r '.identity.principalId // empty')
   [ -n "$PRINC" ] && pass "  has managed identity ($PRINC)" || fail "  $pb has no managed identity"
-  DRY=$(echo "$J" | jq -r '.properties.parameters.dryRun.value // empty')
-  [ "$DRY" = "true" ] && pass "  dryRun defaults to true (safe)" || echo "  NOTE: $pb dryRun=$DRY (enforcing mode — ensure this is intended)"
 done
 
 # 2. Disable-user playbook contains the TWO-KEY safety guard in its definition.
 DEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
-echo "$DEF" | grep -q 'decoyObjectIds'   && pass "disable-user keys on decoyObjectIds (acts only on decoy identities)" || fail "decoyObjectIds guard missing — playbook could act on non-decoys!"
+echo "$DEF" | grep -q 'decoyObjectIds'   && pass "disable-user keys on decoyObjectIds (acts only on decoy identities)" || fail "decoyObjectIds guard missing, playbook could act on non-decoys!"
 echo "$DEF" | grep -q 'allowlistObjectIds' && pass "disable-user honors the allowlist (break-glass/agent backstop)" || fail "allowlist guard missing from disable-user playbook!"
 echo "$DEF" | grep -q 'Comment_not_a_decoy' && pass "disable-user has the fail-loud 'not a decoy' branch (no silent skips)" || fail "fail-loud 'not a decoy' branch missing"
 echo "$DEF" | grep -q 'revokeSignInSessions' && pass "disable-user playbook revokes sessions" || fail "revokeSignInSessions missing"
@@ -54,7 +52,7 @@ echo "$DEF" | grep -q 'servicePrincipals' && pass "disable endpoint covers servi
 
 # 2b. Confirm decoyObjectIds is actually populated (else the guard would never act).
 DECOY_N=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$DISABLE?api-version=2019-05-01" 2>/dev/null | jq '(.properties.parameters.decoyObjectIds.value // []) | length')
-[ "${DECOY_N:-0}" -ge 1 ] && pass "decoyObjectIds populated ($DECOY_N id(s))" || echo "  NOTE: decoyObjectIds is empty — run tests/sync_inventory.sh and redeploy response before enforcing."
+[ "${DECOY_N:-0}" -ge 1 ] && pass "decoyObjectIds populated ($DECOY_N id(s))" || echo "  NOTE: decoyObjectIds is empty, run tests/sync_inventory.sh and redeploy response before enforcing."
 
 # 2c. Isolate-resource playbook scopes to the honeypot RG with a fail-loud branch.
 IDEF=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$PLAYBOOK_RG/providers/Microsoft.Logic/workflows/$ISOLATE?api-version=2019-05-01" 2>/dev/null | jq -c '.properties.definition')
