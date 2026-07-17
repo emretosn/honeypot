@@ -1,21 +1,13 @@
-metadata description = 'Internal-plane naming helpers as compile-time functions. The honeypot marker is allowed on resources that are never surfaced to an attacker (Log Analytics, Sentinel, management RGs). EXCEPTION: Logic App playbooks own a managed-identity service principal that is readable directory-wide (AzureHound surfaces its name + resource-id path), so playbook names/RG must NOT carry the marker — use playbookName / playbookResourceGroup, which are production-plausible. Decoy-plane names are produced separately by the network module and must NOT carry the marker.'
+metadata description = 'Internal-plane naming helpers as compile-time functions. The management plane (resource group, Log Analytics, Sentinel) and the SOAR playbooks now share ONE production-plausible resource group with NO honeypot marker in any name: Logic App playbooks own a managed-identity service principal that is readable directory-wide (AzureHound surfaces its displayName + the resource-id path, which includes the resource group name), so nothing that co-locates with a playbook may carry the marker. Honeypot ownership lives in non-readable tags + the inventory, never in names. Decoy-plane names are produced separately by the network module and must NOT carry the marker either.'
 
-@description('Base token: <marker>-<env>-<regionCode>.')
+@description('Production-plausible management/operations resource group. Hosts Log Analytics, Sentinel AND the SOAR playbooks, no honeypot marker (a playbook managed identity leaks the resource-id path directory-wide).')
 @export()
-func base(marker string, env string, regionCode string) string => '${marker}-${env}-${regionCode}'
+func mgmtResourceGroup(regionCode string) string => 'rg-core-ops-${regionCode}'
 
-@description('Internal management resource group.')
+@description('Production-plausible Log Analytics / Sentinel workspace name. No marker (kept production-plausible for defense in depth).')
 @export()
-func mgmtResourceGroup(marker string, env string, regionCode string) string => 'rg-${base(marker, env, regionCode)}-mgmt'
+func logAnalyticsWorkspace(regionCode string) string => 'log-core-ops-${regionCode}'
 
-@description('Log Analytics workspace.')
-@export()
-func logAnalyticsWorkspace(marker string, env string, regionCode string) string => 'log-${base(marker, env, regionCode)}'
-
-@description('Production-plausible resource group that HOSTS the SOAR playbooks. Deliberately carries NO honeypot marker: Logic App managed identities project a service principal into the directory that any member can read (surfaced by tools like AzureHound via displayName + the resource-id path in alternativeNames), so the playbook RG must look like ordinary production automation. Honeypot ownership for these resources lives in the inventory, not in the name.')
-@export()
-func playbookResourceGroup(regionCode string) string => 'rg-core-ops-${regionCode}'
-
-@description('Production-plausible, purpose-hidden SOAR playbook (Logic App) name. Same directory-leak rationale as playbookResourceGroup — the name is visible via the managed identity, so it must NOT reveal "disable-user"/"isolate-resource" or the honeypot marker. Callers pass an opaque suffix (e.g. "01").')
+@description('Production-plausible, purpose-hidden SOAR playbook (Logic App) name. The name is visible via the managed identity, so it must NOT reveal "disable-user"/"isolate-resource" or a honeypot marker. Callers pass an opaque suffix (e.g. "01").')
 @export()
 func playbookName(regionCode string, suffix string) string => 'logic-core-ops-${regionCode}-${suffix}'

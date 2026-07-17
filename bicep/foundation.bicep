@@ -4,9 +4,6 @@ targetScope = 'subscription'
 
 import * as naming from 'modules/naming/naming.bicep'
 
-@description('Environment short name, e.g. dev / test / prod.')
-param env string = 'dev'
-
 @description('Azure region for all foundation resources.')
 param location string = 'westeurope'
 
@@ -21,18 +18,15 @@ param retentionInDays int = 90
 @description('Daily Log Analytics ingestion cap (GB). Bounds Sentinel cost in non-prod.')
 param dailyQuotaGb int = 2
 
-@description('Common tags. project=honeypot is the internal ownership marker; safe here because the management plane is not attacker-visible.')
+@description('Common tags. project=honeypot is the internal ownership marker; it lives ONLY in tags (readable only with RBAC on the RG), never in resource names, because this RG now also hosts directory-visible playbook managed identities.')
 param tags object = {
   project: 'honeypot'
   plane: 'internal-mgmt'
   managedBy: 'iac'
 }
 
-@description('Honeypot marker for the internal plane. Never applied to decoy-plane resources.')
-param marker string = 'hp'
-
 resource mgmtRg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
-  name: naming.mgmtResourceGroup(marker, env, regionCode)
+  name: naming.mgmtResourceGroup(regionCode)
   location: location
   tags: tags
 }
@@ -41,7 +35,7 @@ module law 'modules/monitoring/logAnalytics.bicep' = {
   name: 'logAnalytics'
   scope: mgmtRg
   params: {
-    name: naming.logAnalyticsWorkspace(marker, env, regionCode)
+    name: naming.logAnalyticsWorkspace(regionCode)
     location: location
     retentionInDays: retentionInDays
     dailyQuotaGb: dailyQuotaGb
@@ -49,10 +43,10 @@ module law 'modules/monitoring/logAnalytics.bicep' = {
   }
 }
 
-@description('Management resource group name — input to the detection and response modules.')
+@description('Management resource group name, input to the detection and response modules.')
 output mgmtResourceGroupName string = mgmtRg.name
 
-@description('Log Analytics workspace resource ID — input to the detection module and all diagnostics.')
+@description('Log Analytics workspace resource ID, input to the detection module and all diagnostics.')
 output logAnalyticsWorkspaceId string = law.outputs.workspaceId
 
 @description('Log Analytics workspace name.')

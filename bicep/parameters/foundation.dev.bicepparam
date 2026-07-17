@@ -1,6 +1,5 @@
 using '../foundation.bicep'
 
-param env = 'dev'
 param location = 'westeurope'
 param regionCode = 'weu'
 param retentionInDays = 90

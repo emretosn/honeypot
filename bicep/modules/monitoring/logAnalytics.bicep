@@ -1,4 +1,4 @@
-metadata description = 'Log Analytics workspace — central sink for Entra, Defender and resource diagnostics. Microsoft Sentinel is layered on this workspace by the detection module.'
+metadata description = 'Log Analytics workspace, central sink for Entra, Defender and resource diagnostics. Microsoft Sentinel is layered on this workspace by the detection module.'
 
 @description('Workspace name.')
 param name string
