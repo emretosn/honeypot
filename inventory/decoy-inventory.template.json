@@ -3,25 +3,15 @@
   "schemaVersion": 1,
   "tenantId": "",
   "identity": {
-    "decoyAdministrativeUnitId": "",
-    "lure": {
-      "upn": "",
-      "objectId": "",
-      "displayName": ""
-    },
-    "decoyPersonas": [],
-    "lureRoleDefinitionId": "fe930be7-5e62-47db-91af-98c3a49a38b1",
-    "decoyGroupIds": [],
-    "decoyAppIds": [],
     "reachableApp": {
-      "$comment": "Reachable escalation edge — the decoy app/SP the foothold can take over. Consumed by detection (credential-add + SP sign-in rules).",
+      "$comment": "Reachable escalation edge — the decoy app/SP the foothold OWNS and can take over (owned app requests unconsented RoleManagement.ReadWrite.Directory + carries pre-seeded cert/secret; the SP is the payoff, Owner of the decoy RG + Key Vault Secrets User). Consumed by detection (credential-add + SP sign-in + consent-grant rules) and response (disable-SP guard).",
       "appId": "",
       "appObjectId": "",
       "spObjectId": "",
       "displayName": ""
     },
     "emergencyAccess": {
-      "$comment": "Standalone hollow admin the foothold can reset (Password Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard).",
+      "$comment": "Standalone hollow admin the foothold can reset (Privileged Authentication Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard).",
       "upn": "",
       "objectId": "",
       "displayName": "",
