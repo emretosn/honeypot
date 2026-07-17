@@ -11,111 +11,10 @@ variable "verified_domain" {
   description = "A verified Entra domain for decoy UPNs, e.g. contoso.onmicrosoft.com."
 }
 
-variable "decoy_au_name" {
-  type        = string
-  default     = "IT Operations"
-  description = "Innocuous, production-sounding administrative unit name. No honeypot marker."
-}
-
-variable "lure_upn_prefix" {
-  type        = string
-  default     = "identity-admin"
-  description = "UPN/mail-nickname prefix of the primary lure. Enticing, role-descriptive."
-}
-
-variable "lure_display_name" {
-  type        = string
-  default     = "Identity Administrator"
-  description = "Display name of the primary lure. Privileged-sounding, production-like."
-}
-
-variable "lure_job_title" {
-  type        = string
-  default     = "Senior Identity & Access Administrator"
-  description = "Job title that reinforces the lure's apparent privilege."
-}
-
-variable "decoy_personas" {
-  type = list(object({
-    upn_prefix   = string
-    display_name = string
-    job_title    = string
-  }))
-  default = [
-    { upn_prefix = "helpdesk-admin", display_name = "Helpdesk Administrator", job_title = "Service Desk Administrator" },
-    { upn_prefix = "backup-admin", display_name = "Backup Administrator", job_title = "Backup & Recovery Administrator" },
-  ]
-  description = "Supporting decoy personas in the decoy AU (makes the AU look populated/real)."
-}
-
-# --- The lure's apparent privilege: an AU-scoped custom role over decoy users only. ---
-
-# The lure's apparent privilege is a BUILT-IN Entra role assigned at AU scope. Custom roles
-# cannot hold reset-password / enable-disable actions, so a built-in AU-scopable role is the
-# only way to give the lure genuinely enticing (and Entra-enforced-contained) admin power.
-variable "lure_role_definition_id" {
-  type = string
-  # User Administrator (well-known template ID). AU-scopable; manages users/groups and resets
-  # passwords for non-admins in the AU only.
-  default     = "fe930be7-5e62-47db-91af-98c3a49a38b1"
-  description = "Built-in directory role definition (template) ID assigned to the lure at AU scope. Default = User Administrator."
-}
-
-variable "lure_role_name" {
-  type        = string
-  default     = "User Administrator"
-  description = "Display name of the built-in role above (for documentation / outputs only)."
-}
-
-# --- Escalation bait ---
-
-variable "decoy_group_name" {
-  type        = string
-  default     = "Identity Administrators"
-  description = "Privileged-sounding security group the lure owns. AzureHound-drawable bait."
-}
-
-variable "decoy_app_names" {
-  type        = list(string)
-  default     = ["Directory Connector"]
-  description = "Powerful-sounding owned apps with NO real grants. Each is a tripwire."
-}
-
-variable "enable_pim" {
-  type        = bool
-  default     = false
-  description = "If true, grant the custom role to the lure as PIM-ELIGIBLE (requires Entra ID P2); activation is the tripwire. If false, the role is an active assignment. Both stay AU-scoped."
-}
-
 variable "foothold_principal_object_id" {
   type        = string
   default     = ""
-  description = "Object ID of the attacker foothold principal. If set, it is made owner of the reachable decoy app (reachable_edge.tf) so it can add a credential and take over the decoy SP — the genuine, contained escalation path."
-}
-
-# --- Conditional Access ---
-
-variable "enable_conditional_access" {
-  type        = bool
-  default     = true
-  description = "Create a Conditional Access policy targeting the decoy users."
-}
-
-variable "ca_policy_state" {
-  type        = string
-  default     = "enabledForReportingButNotEnforced"
-  description = "CA policy state: enabledForReportingButNotEnforced (report-only, safe default), enabled, or disabled."
-  validation {
-    condition     = contains(["enabled", "disabled", "enabledForReportingButNotEnforced"], var.ca_policy_state)
-    error_message = "ca_policy_state must be enabled, disabled, or enabledForReportingButNotEnforced."
-  }
-}
-
-# Source allowlist for the optional activity-generation agent. Excluded from detection AND remediation.
-variable "agent_named_location_cidrs" {
-  type        = list(string)
-  default     = []
-  description = "CIDRs of the (optional) activity agent. Empty = no agent yet."
+  description = "Object ID of the attacker foothold principal. If set, it is made owner of the reachable decoy app (reachable_edge.tf) so it can add a credential and take over the decoy SP, the genuine, contained escalation path."
 }
 
 # --- Reachable escalation edge. ---
@@ -166,10 +65,11 @@ variable "emergency_job_title" {
 
 variable "emergency_reset_role_id" {
   type = string
-  # Password Administrator (well-known built-in template ID). AU-scopable; can reset passwords for
-  # non-admins in scope only. Custom roles cannot hold the reset action, so a built-in role is required.
-  default     = "966707d0-3269-4727-9be2-8c3a10f19b9d"
-  description = "Built-in directory role template ID granted to the foothold at the emergency AU scope. Default = Password Administrator."
+  # Privileged Authentication Administrator (well-known built-in template ID). AU-scopable; can reset
+  # auth methods/passwords of ANY user (admin OR non-admin) but only for members IN the assigned AU.
+  # SAFETY: never add a real admin to the emergency AU, PAA can reset in-AU admins.
+  default     = "7be44c8a-adaf-4e2a-84d6-ab2649e08a13"
+  description = "Built-in directory role template ID granted to the foothold at the emergency AU scope. Default = Privileged Authentication Administrator."
 }
 
 # --- Production/honeypot boundary & response contract inputs ---

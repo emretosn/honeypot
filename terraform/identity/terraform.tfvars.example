@@ -13,34 +13,9 @@ deploy_production = false
 # enforcement (dryRun=false). In early testing this may stay empty.
 break_glass_object_ids = []
 
-# Decoy realism — production-looking, NO honeypot marker.
-decoy_au_name     = "IT Operations"
-lure_upn_prefix   = "identity-admin"
-lure_display_name = "Identity Administrator"
-lure_job_title    = "Senior Identity & Access Administrator"
-
-decoy_personas = [
-  { upn_prefix = "helpdesk-admin", display_name = "Helpdesk Administrator", job_title = "Service Desk Administrator" },
-  { upn_prefix = "backup-admin", display_name = "Backup Administrator", job_title = "Backup & Recovery Administrator" },
-]
-
-# Apparent privilege: built-in role assigned AU-scoped (decoys only). Default = User
-# Administrator. Override lure_role_definition_id to use a different AU-scopable built-in role.
-# lure_role_definition_id = "fe930be7-5e62-47db-91af-98c3a49a38b1"  # User Administrator
-
-# Escalation bait.
-decoy_group_name = "Identity Administrators"
-decoy_app_names  = ["Directory Connector"]
-
-# PIM eligibility instead of active role (requires Entra ID P2). Default false.
-enable_pim = false
-
-# Optional explicit foothold->lure edge for demos (object ID of a test foothold principal).
+# Object ID of the attacker foothold principal. Made owner of the reachable decoy app
+# (core-automation-runner) so it can add a credential and take over the decoy SP.
 foothold_principal_object_id = ""
 
-# Conditional Access. Report-only by default; switch to "enabled" to enforce.
-enable_conditional_access = true
-ca_policy_state           = "enabledForReportingButNotEnforced"
-
-# Activity agent source allowlist. Leave empty until the optional activity agent is deployed.
-agent_named_location_cidrs = []
+# Reachable decoy app name (production-plausible; the foothold owns it). Optional override.
+# reachable_app_name = "core-automation-runner"

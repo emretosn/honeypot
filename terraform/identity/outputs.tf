@@ -5,45 +5,6 @@ output "tenant_id" {
 
 # --- Values consumed by inventory/decoy-inventory.json (detection + remediation allowlist). ---
 
-output "decoy_administrative_unit_id" {
-  value       = azuread_administrative_unit.decoy.object_id
-  description = "Object ID of the decoy administrative unit."
-}
-
-output "lure" {
-  value = {
-    upn          = azuread_user.lure.user_principal_name
-    object_id    = azuread_user.lure.object_id
-    display_name = azuread_user.lure.display_name
-  }
-  description = "Primary lure identity identifiers."
-}
-
-output "decoy_persona_object_ids" {
-  value       = [for u in azuread_user.persona : u.object_id]
-  description = "Object IDs of the supporting decoy personas."
-}
-
-output "lure_role_definition_id" {
-  value       = var.lure_role_definition_id
-  description = "Definition (template) ID of the built-in role assigned to the lure at AU scope."
-}
-
-output "decoy_group_id" {
-  value       = azuread_group.decoy.object_id
-  description = "Object ID of the privileged-sounding decoy group."
-}
-
-output "decoy_app_ids" {
-  value       = [for a in azuread_application.decoy : a.object_id]
-  description = "Object IDs of the powerful-sounding decoy applications."
-}
-
-output "agent_named_location_id" {
-  value       = length(azuread_named_location.agent) > 0 ? azuread_named_location.agent[0].object_id : ""
-  description = "Object ID of the agent named location (empty if no agent configured)."
-}
-
 output "break_glass_object_ids" {
   value       = var.break_glass_object_ids
   description = "Production break-glass/GA object IDs (input). Synced to inventory allowlist.breakGlassObjectIds so detection excludes and response never disables them."
@@ -72,12 +33,6 @@ output "reachable_sp_rbac_scoped" {
   description = "Whether the decoy SP's contained Azure RBAC (Owner on decoy RG, KV Secrets User) is in place. False until the network is deployed and the ids are passed."
 }
 
-output "lure_password" {
-  value       = random_password.lure.result
-  sensitive   = true
-  description = "Lure password for the manual interactive sign-in validation scenario. Retrieve with: terraform output -raw lure_password"
-}
-
 output "emergency_access" {
   value = {
     upn                    = azuread_user.emergency.user_principal_name
@@ -86,7 +41,7 @@ output "emergency_access" {
     administrative_unit_id = azuread_administrative_unit.emergency.object_id
     reset_role_assigned    = length(azuread_directory_role_assignment.emergency_reset) > 0
   }
-  description = "Standalone hollow admin the foothold can reset (Password Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard)."
+  description = "Standalone hollow admin the foothold can reset (Privileged Authentication Administrator scoped to a single-member AU). Consumed by detection (reset + sign-in rules) and response (disable-user guard)."
 }
 
 output "emergency_access_password" {

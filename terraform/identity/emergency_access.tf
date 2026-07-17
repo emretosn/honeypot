@@ -1,13 +1,18 @@
-# Standalone "reset-me" deception — independent of the lure and its AU. A hollow, admin-named
-# account that ANY compromised identity (here the foothold; production: everyone, via a
-# role-assignable group) can reset the password of — and ONLY that account.
+# Standalone "reset-me" deception. A hollow, admin-named account that ANY compromised identity
+# (here the foothold; production: everyone, via a role-assignable group) can reset the password of,
+# and ONLY that account.
 #
 # Why a single-member AU: Entra has no single-USER scope for directory roles, and custom roles
 # cannot hold the password-reset action, so the ONLY way to constrain "reset" to exactly one
 # account is to isolate that account in its own administrative unit and scope a BUILT-IN
-# Password Administrator role to that AU. The AU scopes the TARGET (this one decoy), NOT the
-# assignees — no mass AU enrollment. The account is powerless (no roles, no RBAC, owns nothing);
-# resetting it or signing in as it is a high-fidelity tripwire that leads nowhere real.
+# Privileged Authentication Administrator role to that AU. The AU scopes the TARGET (this one decoy),
+# NOT the assignees, no mass AU enrollment. The account is powerless (no roles, no RBAC, owns
+# nothing); resetting it or signing in as it is a high-fidelity tripwire that leads nowhere real.
+#
+# Why PAA: BloodHound ignores AU scope and models PAA as able to reset
+# Global Admins, so the graph draws attacker -> AZResetPassword -> real Tenant Admins
+# while Entra keeps the real power confined to this single decoy AU.
+# SAFETY: this AU must hold ONLY decoys, PAA can reset in-AU admins too.
 
 # Dedicated AU holding only the emergency-access decoy (defines the reset blast radius = 1 account).
 resource "azuread_administrative_unit" "emergency" {
@@ -37,10 +42,10 @@ resource "azuread_administrative_unit_member" "emergency" {
   member_object_id              = azuread_user.emergency.object_id
 }
 
-# The reset power: the foothold holds built-in Password Administrator scoped to the single-member
-# emergency AU, so it can reset the password of ONLY this decoy. Count-gated on the foothold id so
-# identity still deploys without a foothold. In production, principal_object_id would be a
-# role-assignable group representing "everyone".
+# The reset power: the foothold holds built-in Privileged Authentication Administrator scoped to the
+# single-member emergency AU, so it can reset the auth methods/password of ONLY this decoy. Count-gated
+# on the foothold id so identity still deploys without a foothold. In production, principal_object_id
+# would be a role-assignable group representing "everyone".
 resource "azuread_directory_role_assignment" "emergency_reset" {
   count               = var.foothold_principal_object_id == "" ? 0 : 1
   role_id             = var.emergency_reset_role_id
