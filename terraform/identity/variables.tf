@@ -37,6 +37,12 @@ variable "decoy_key_vault_id" {
   description = "Resource ID of the decoy Key Vault (from inventory.network.keyVaultId). When set, the decoy SP is granted Key Vault Secrets User so it can read the honeytoken secrets. Empty = skip."
 }
 
+variable "decoy_storage_account_id" {
+  type        = string
+  default     = ""
+  description = "Resource ID of the decoy storage account (from inventory.network.storageAccountId). When set, the decoy SP is granted Storage Blob Data Reader so it can read the breadcrumb blobs over Entra auth (shared-key auth is disabled on the account). Empty = skip."
+}
+
 # --- Standalone reset-me deception (emergency-access decoy). See emergency_access.tf. ---
 
 variable "emergency_au_name" {

@@ -96,3 +96,16 @@ resource "azurerm_role_assignment" "sp_kv_secrets" {
   principal_id         = azuread_service_principal.reachable.object_id
   principal_type       = "ServicePrincipal"
 }
+
+# Decoy storage data-plane read. The storage account has shared-key (account key / SAS) auth
+# disabled, so the payoff is an Entra-token blob read; Owner on the RG is control-plane only and does
+# NOT grant blob data access, so the SP needs an explicit data role. Storage Blob Data Reader is the
+# minimum that lets the taken-over SP list/read the breadcrumb blobs (each read a tripwire), scoped
+# to the decoy account only. Count-gated so identity still deploys before the network exists.
+resource "azurerm_role_assignment" "sp_blob_reader" {
+  count                = var.decoy_storage_account_id == "" ? 0 : 1
+  scope                = var.decoy_storage_account_id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azuread_service_principal.reachable.object_id
+  principal_type       = "ServicePrincipal"
+}

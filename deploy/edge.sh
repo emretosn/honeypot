@@ -15,13 +15,15 @@ INV="$REPO_ROOT/inventory/decoy-inventory.json"
 
 RG_ID=$(jq -r '.network.honeypotResourceGroupId // ""' "$INV" 2>/dev/null)
 KV_ID=$(jq -r '.network.keyVaultId // ""' "$INV" 2>/dev/null)
+SA_ID=$(jq -r '.network.storageAccountId // ""' "$INV" 2>/dev/null)
 [ -n "$RG_ID" ] || die "decoy RG ID not in inventory, deploy the network first (deploy/network.sh)."
 
 export TF_VAR_verified_domain="$VERIFIED_DOMAIN"
 export TF_VAR_decoy_resource_group_id="$RG_ID"
 export TF_VAR_decoy_key_vault_id="$KV_ID"
+export TF_VAR_decoy_storage_account_id="$SA_ID"
 
-info "Granting the decoy SP Owner on $RG_ID + Key Vault Secrets User on the decoy KV"
+info "Granting the decoy SP Owner on $RG_ID + Key Vault Secrets User on the decoy KV + Storage Blob Data Reader on the decoy storage"
 terraform -chdir="$TF_DIR" apply -auto-approve -input=false
 
 info "Syncing inventory"
