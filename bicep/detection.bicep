@@ -64,15 +64,20 @@ var qKvSecretRead = join([
   '| project TimeGenerated, OperationName, Resource, Actor, ActorApp, ActorIp, ResourceId'
 ], '\n')
 
+// Decoy storage read. Two attacker mechanisms, both high-fidelity: shared-key/SAS data access (a
+// stolen account key or SAS token), and an Entra (OAuth) read BY THE DECOY SP itself (the account is
+// shared-key-disabled, so the taken-over SP reads blobs with its Storage Blob Data Reader role). The
+// OAuth arm is scoped to the decoy SP object id so platform/Defender OAuth scans never match; attacker
+// tooling (CLI/PowerShell) is never excluded. TrustedAccess platform scanning is excluded by mechanism.
+var storageOauthClause = empty(reachableSpObjectId) ? '' : ' or (AuthenticationType == "OAuth" and RequesterObjectId == "${reachableSpObjectId}")'
 var qResourceAccess = join([
   'StorageBlobLogs'
   '| where AccountName =~ "${decoyStorageAccountName}"'
-  // Only attacker-style data access (a stolen SAS token or account key). TrustedAccess = the
-  // Azure platform/Defender scanning the account; not an attacker, so excluded.
-  '| where AuthenticationType in ("SAS", "AccountKey")'
+  '| extend RequesterObjectId = columnifexists("RequesterObjectId", "")'
+  '| where AuthenticationType in ("SAS", "AccountKey")${storageOauthClause}'
   '| extend ActorIp = columnifexists("CallerIpAddress", "")'
   '| extend ResourceId = columnifexists("_ResourceId", "")'
-  '| project TimeGenerated, AccountName, OperationName, Uri, ActorIp, AuthenticationType, ResourceId'
+  '| project TimeGenerated, AccountName, OperationName, Uri, ActorIp, AuthenticationType, RequesterObjectId, ResourceId'
 ], '\n')
 
 // Reachable-edge invited actions. The decoy app/SP filters come from the inventory.
@@ -202,7 +207,7 @@ module ruleResourceAccess 'modules/detection/scheduledRule.bicep' = if (enableRe
     ruleId: guid(workspaceName, 'decoy-resource-access')
     groupingLookbackDuration: groupingLookbackDuration
     displayName: 'Honeypot: decoy storage accessed'
-    ruleDescription: 'SAS/AccountKey data-plane access to the decoy storage account. This storage is unused by the organization and holds only breadcrumb blobs, and the query excludes Azure platform/TrustedAccess scanning, so any hit is an attacker reading the decoy (near-100% true positive). Reachable only via the taken-over reachable SP (Owner of the decoy RG, list keys).'
+    ruleDescription: 'Data-plane read of the decoy storage account, either shared-key/SAS access or an Entra (OAuth) read by the taken-over decoy service principal. This storage is unused by the organization and holds only breadcrumb blobs, and the query excludes Azure platform/TrustedAccess scanning (OAuth is scoped to the decoy SP object id), so any hit is an attacker reading the decoy (near-100% true positive). Reachable only from inside the spoke via the decoy blob private endpoint, using the taken-over reachable SP (Storage Blob Data Reader).'
     severity: 'High'
     tactics: ['Collection', 'Discovery']
     queryFrequency: 'PT15M'
