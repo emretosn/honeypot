@@ -9,7 +9,7 @@ param location string
 @description('Address space CIDRs.')
 param addressPrefixes array
 
-@description('Subnets: list of { name, prefix, nsgId? }. nsgId empty string = no NSG.')
+@description('Subnets: list of { name, prefix, nsgId?, disablePeNetworkPolicies? }. nsgId empty string = no NSG. disablePeNetworkPolicies=true sets privateEndpointNetworkPolicies to Disabled (required on subnets that host private endpoints).')
 param subnets array
 
 @description('Resource tags.')
@@ -31,6 +31,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
           networkSecurityGroup: empty(s.?nsgId ?? '') ? null : {
             id: s.nsgId
           }
+          privateEndpointNetworkPolicies: (s.?disablePeNetworkPolicies ?? false) ? 'Disabled' : 'Enabled'
         }
       }
     ]

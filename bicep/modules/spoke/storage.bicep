@@ -24,6 +24,12 @@ resource sa 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     supportsHttpsTrafficOnly: true
+    // Private-only + Entra-only: reachable exclusively over the spoke blob private endpoint, and
+    // shared-key (account key / SAS) auth is disabled (also enforced by governance policy in hardened
+    // tenants). An attacker who takes over the reachable SP reads blobs with an Entra token from
+    // inside the spoke; the SP is granted Storage Blob Data Reader for exactly that (a tripwire).
+    publicNetworkAccess: 'Disabled'
+    allowSharedKeyAccess: false
   }
 }
 

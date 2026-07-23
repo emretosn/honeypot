@@ -38,6 +38,11 @@ param storageAccountName string
 param tags object = {}
 
 var workloadSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 0)
+var peSubnetPrefix = cidrSubnet(vnetAddressPrefix, 24, 1)
+
+// Private DNS zone names for the two decoy PaaS resources reached over a private endpoint.
+var kvDnsZoneName = 'privatelink.vaultcore.azure.net'
+var blobDnsZoneName = 'privatelink.blob.${environment().suffixes.storage}'
 
 // NSG for the workload subnet: allow SSH only from within the VNet (internal admin/monitoring
 // realism, never from the internet, there is no public ingress), and DENY egress to production
@@ -81,12 +86,20 @@ module workloadNsg '../network/nsg.bicep' = {
 }
 
 // Single workload subnet (hosts the decoy VM when enabled; otherwise stays empty). No App Gateway
-// subnet: the spoke exposes NOTHING to the internet, this is an internal-attacker honeypot.
+// subnet: the spoke exposes NOTHING to the internet, this is an internal-attacker honeypot. A
+// dedicated private-endpoint subnet (PE network policies disabled) holds the decoy KV/storage
+// private endpoints, so those PaaS resources are reachable only from inside the spoke.
 var spokeSubnets = [
   {
     name: 'workload-subnet'
     prefix: workloadSubnetPrefix
     nsgId: workloadNsg.outputs.id
+  }
+  {
+    name: 'pe-subnet'
+    prefix: peSubnetPrefix
+    nsgId: ''
+    disablePeNetworkPolicies: true
   }
 ]
 
@@ -142,6 +155,71 @@ module storage '../spoke/storage.bicep' = {
     location: location
     tags: tags
     workspaceId: workspaceId
+  }
+}
+
+// Private DNS zones so the decoy VM (and anything in the spoke) resolves the KV/storage private
+// endpoints to their private IPs. Linked to the spoke VNet only, the operator's workstation cannot
+// resolve or reach them, which is the point: the loot path runs from inside the spoke.
+resource kvDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: kvDnsZoneName
+  location: 'global'
+  tags: tags
+}
+
+resource blobDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: blobDnsZoneName
+  location: 'global'
+  tags: tags
+}
+
+resource kvDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: kvDnsZone
+  name: 'to-spoke'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: vnet.outputs.id
+    }
+  }
+}
+
+resource blobDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: blobDnsZone
+  name: 'to-spoke'
+  location: 'global'
+  properties: {
+    registrationEnabled: false
+    virtualNetwork: {
+      id: vnet.outputs.id
+    }
+  }
+}
+
+module keyVaultPe '../spoke/privateEndpoint.bicep' = {
+  name: '${namePrefix}-kv-pe'
+  params: {
+    name: '${namePrefix}-kv-pe'
+    location: location
+    tags: tags
+    subnetId: vnet.outputs.subnetIds['pe-subnet']
+    privateLinkServiceId: keyVault.outputs.id
+    groupId: 'vault'
+    privateDnsZoneId: kvDnsZone.id
+  }
+}
+
+module storagePe '../spoke/privateEndpoint.bicep' = {
+  name: '${namePrefix}-blob-pe'
+  params: {
+    name: '${namePrefix}-blob-pe'
+    location: location
+    tags: tags
+    subnetId: vnet.outputs.subnetIds['pe-subnet']
+    privateLinkServiceId: storage.outputs.id
+    groupId: 'blob'
+    privateDnsZoneId: blobDnsZone.id
   }
 }
 

@@ -47,10 +47,14 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    publicNetworkAccess: 'Enabled'
+    // Private-only: reachable exclusively over the spoke private endpoint. Public data-plane access
+    // is disabled (also enforced by governance policy in hardened tenants), so an attacker loots the
+    // honeytokens only from inside the spoke via the taken-over reachable SP. Control-plane secret
+    // planting at deploy time still works (it does not traverse the data plane).
+    publicNetworkAccess: 'Disabled'
     networkAcls: {
       bypass: 'AzureServices'
-      defaultAction: 'Allow'
+      defaultAction: 'Deny'
     }
   }
 }
