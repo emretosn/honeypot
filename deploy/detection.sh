@@ -13,6 +13,7 @@ INV="$REPO_ROOT/inventory/decoy-inventory.json"
 # Reachable-edge ids, enable the invited-action rules (credential-add, SP sign-in, consent) only
 # when the app/SP exist in the inventory.
 REACHABLE_APP_ID=$(jq -r '.identity.reachableApp.appId // ""' "$INV")
+REACHABLE_APP_OBJECT_ID=$(jq -r '.identity.reachableApp.appObjectId // ""' "$INV")
 REACHABLE_SP_ID=$(jq -r '.identity.reachableApp.spObjectId // ""' "$INV")
 ENABLE_REACHABLE_EDGE_RULES="false"
 [ -n "$REACHABLE_APP_ID" ] && [ -n "$REACHABLE_SP_ID" ] && ENABLE_REACHABLE_EDGE_RULES="true"
@@ -83,7 +84,12 @@ else
   info "AzureActivity not yet ingested, skipping the VM run-command rule (re-run detection.sh later)"
 fi
 
-info "Deploying detection (Sentinel + analytics rules) to $MGMT_RG"
+# Incident grouping lookback. Default PT5H suits production; set GROUPING_LOOKBACK=PT5M during
+# testing so each trigger opens its own incident (and re-fires the playbooks) instead of folding
+# into a recent one.
+GROUPING_LOOKBACK="${GROUPING_LOOKBACK:-PT5H}"
+
+info "Deploying detection (Sentinel + analytics rules) to $MGMT_RG (grouping lookback: $GROUPING_LOOKBACK)"
 az deployment group create \
   --resource-group "$MGMT_RG" \
   --template-file "$REPO_ROOT/bicep/detection.bicep" \
@@ -92,10 +98,11 @@ az deployment group create \
                decoyVmName="$DECOY_VM_NAME" \
                enableResourceRules="$ENABLE_RESOURCE_RULES" \
                enableVmRunCommandRule="$ENABLE_VM_RUNCOMMAND_RULE" \
-               reachableAppId="$REACHABLE_APP_ID" reachableSpObjectId="$REACHABLE_SP_ID" \
+               reachableAppId="$REACHABLE_APP_ID" reachableAppObjectId="$REACHABLE_APP_OBJECT_ID" reachableSpObjectId="$REACHABLE_SP_ID" \
                enableReachableEdgeRules="$ENABLE_REACHABLE_EDGE_RULES" \
                emergencyAccessUpn="$EMERGENCY_UPN" \
                privilegedAuthAllowlistIds="$PRIV_AUTH_ALLOWLIST_JSON" \
+               groupingLookbackDuration="$GROUPING_LOOKBACK" \
   -o none
 ok "detection deployed (resource: $ENABLE_RESOURCE_RULES, reachable-edge: $ENABLE_REACHABLE_EDGE_RULES, vm-runcommand: $ENABLE_VM_RUNCOMMAND_RULE)"
 

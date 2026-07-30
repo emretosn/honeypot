@@ -20,6 +20,9 @@ param signInAllowlistIps array = []
 @description('App (client) ID of the reachable decoy app the foothold can take over (from inventory.identity.reachableApp.appId). Empty disables the credential-add rule.')
 param reachableAppId string = ''
 
+@description('App OBJECT ID of the reachable decoy app (from inventory.identity.reachableApp.appObjectId). AuditLogs credential-add / consent events reference the app by its object id (TargetResources.id), NOT its client id, so this is the value those rules match on.')
+param reachableAppObjectId string = ''
+
 @description('Object ID of the reachable decoy service principal (from inventory.identity.reachableApp.spObjectId). Empty disables the SP sign-in rule.')
 param reachableSpObjectId string = ''
 
@@ -86,7 +89,7 @@ var qCredentialAdd = join([
   '| where OperationName has_any ("Add service principal credentials", "Update application – Certificates and secrets management", "Add password to application", "Add key to application", "Update application")'
   '| mv-expand TargetResources'
   '| extend targetId = tostring(TargetResources.id)'
-  '| where targetId == "${reachableAppId}" or targetId == "${reachableSpObjectId}"'
+  '| where targetId == "${reachableAppId}" or targetId == "${reachableAppObjectId}" or targetId == "${reachableSpObjectId}"'
   '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
   '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
   '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
@@ -110,7 +113,7 @@ var qConsentGrant = join([
   '| where OperationName has_any ("Consent to application", "Add app role assignment grant to service principal", "Add delegated permission grant", "Add OAuth2PermissionGrant")'
   '| mv-expand TargetResources'
   '| extend targetId = tostring(TargetResources.id), targetName = tostring(TargetResources.displayName)'
-  '| where targetId == "${reachableAppId}" or targetId == "${reachableSpObjectId}" or targetName has "${reachableAppId}"'
+  '| where targetId == "${reachableAppId}" or targetId == "${reachableAppObjectId}" or targetId == "${reachableSpObjectId}" or targetName has "${reachableAppId}"'
   '| extend Actor = tostring(coalesce(InitiatedBy.user.userPrincipalName, InitiatedBy.app.displayName, "unknown"))'
   '| extend ActorId = tostring(coalesce(InitiatedBy.user.id, InitiatedBy.app.servicePrincipalId, ""))'
   '| extend ActorIp = tostring(coalesce(InitiatedBy.user.ipAddress, ""))'
