@@ -58,6 +58,28 @@ az rest --method put \
   || die "failed to set Entra diagnostic settings (need Security Administrator or Global Administrator)."
 ok "Entra diagnostic settings configured (logs take up to ~15 min to flow)"
 
+# --- 1b. Subscription Activity Log -> Log Analytics ----------------------------------------
+# The decoy VM run-command rule reads AzureActivity, which is populated ONLY if the subscription
+# Activity Log is exported to this workspace. Without this, AzureActivity stays empty and the rule
+# can never fire (the table schema may still "exist", so a table-existence check is not enough).
+# Administrative = management-plane ops incl. VM runCommand; Security/Policy add defence-in-depth.
+info "Configuring subscription Activity Log diagnostic settings (Administrative -> $WORKSPACE)"
+ACT_BODY=$(jq -n --arg ws "$WS_ID" '{
+  properties: {
+    workspaceId: $ws,
+    logs: [
+      { category: "Administrative", enabled: true },
+      { category: "Security",       enabled: true },
+      { category: "Policy",          enabled: true }
+    ]
+  }
+}')
+az rest --method put \
+  --url "https://management.azure.com/subscriptions/$CURRENT_SUB/providers/Microsoft.Insights/diagnosticSettings/honeypot-activity?api-version=2021-05-01-preview" \
+  --body "$ACT_BODY" -o none \
+  || die "failed to set subscription Activity Log diagnostic settings (need Owner/Contributor on the subscription)."
+ok "Subscription Activity Log export configured (AzureActivity takes up to ~15 min to flow)"
+
 # --- 2. Sentinel onboarding + analytics rules ----------------------------------------------
 # Resource rules (Key Vault / storage) query AzureDiagnostics (KV AuditEvent) and StorageBlobLogs.
 # Those tables exist only AFTER the decoy KV/storage telemetry first ingests, and Sentinel validates
@@ -74,14 +96,15 @@ else
   info "Resource-rule telemetry not yet ingested, skipping decoy KV/storage rules (re-run detection.sh later)"
 fi
 
-# Decoy VM run-command rule: needs the AzureActivity table present (populated by the Activity
-# connector). Auto-enable once it exists.
-if [ -n "$WS_GUID" ] && workspace_table_exists "$WS_GUID" "AzureActivity"; then
+# Decoy VM run-command rule: needs AzureActivity to actually be INGESTING (the subscription Activity
+# Log export configured above). The table schema can exist while empty, so gate on real rows, not
+# mere table existence, otherwise the rule enables against no data and silently never fires.
+if [ -n "$WS_GUID" ] && workspace_table_has_rows "$WS_GUID" "AzureActivity"; then
   ENABLE_VM_RUNCOMMAND_RULE="true"
-  info "AzureActivity present, enabling the decoy VM run-command rule ($DECOY_VM_NAME)"
+  info "AzureActivity ingesting, enabling the decoy VM run-command rule ($DECOY_VM_NAME)"
 else
   ENABLE_VM_RUNCOMMAND_RULE="false"
-  info "AzureActivity not yet ingested, skipping the VM run-command rule (re-run detection.sh later)"
+  info "AzureActivity not yet ingesting, skipping the VM run-command rule (Activity Log export just set; re-run detection.sh in ~15 min)"
 fi
 
 # Incident grouping lookback. Default PT5H suits production; set GROUPING_LOOKBACK=PT5M during

@@ -42,3 +42,15 @@ workspace_table_exists() {
   local ws_guid="$1" table="$2"
   timeout 30 az monitor log-analytics query -w "$ws_guid" --analytics-query "${table} | limit 1" -o none >/dev/null 2>&1
 }
+
+# True only if the table has actually ingested at least one row in the given window (default 30d).
+# Use for tables whose schema can exist while empty (e.g. AzureActivity before the Activity Log
+# export is wired), where table-existence alone would wrongly enable a rule against no data.
+workspace_table_has_rows() {
+  local ws_guid="$1" table="$2" window="${3:-30d}"
+  local n
+  n=$(timeout 40 az monitor log-analytics query -w "$ws_guid" \
+    --analytics-query "${table} | where TimeGenerated > ago(${window}) | count" \
+    --query "[0].Count" -o tsv 2>/dev/null || echo "")
+  [ -n "$n" ] && [ "$n" != "0" ]
+}
