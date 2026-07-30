@@ -95,6 +95,11 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
         For_each_account: {
           type: 'Foreach'
           foreach: '@triggerBody()?[\'object\']?[\'properties\']?[\'relatedEntities\']'
+          runtimeConfiguration: {
+            concurrency: {
+              repetitions: 1
+            }
+          }
           actions: {
             Check_is_account: {
               type: 'If'

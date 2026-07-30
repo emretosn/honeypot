@@ -75,6 +75,11 @@ resource playbook 'Microsoft.Logic/workflows@2019-05-01' = {
         For_each_resource: {
           type: 'Foreach'
           foreach: '@triggerBody()?[\'object\']?[\'properties\']?[\'relatedEntities\']'
+          runtimeConfiguration: {
+            concurrency: {
+              repetitions: 1
+            }
+          }
           actions: {
             Guard_is_honeypot_resource: {
               type: 'If'
